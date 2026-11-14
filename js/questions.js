@@ -1,0 +1,356 @@
+/*
+ * The owner questionnaire. Content only, no UI code. See README.md "Questions".
+ *
+ * ID rules (answers are saved under these IDs, so they must never change):
+ *  - Never rename or reuse a question `id` or an option `id`. Change the wording freely.
+ *  - To retire a question or option, delete it. Saved answers are kept and shown as "older".
+ *  - New questions and options can go anywhere; they just show up unanswered.
+ *  - Product questions get the ID `p.<product id>.<field id>`, so product and field ids are permanent too.
+ *
+ * Question types: text, longtext, number, single, multi, yesno.
+ * Optional keys: help, required, placeholder, options [{id, label, note}], optionNotes
+ * (a note box under every ticked option, with this placeholder), showIf {q, is | not}
+ * (is/not: an option id or a list of them; the question shows only when it matches).
+ */
+const YES_NO = [
+  { id: "yes", label: "Yes" },
+  { id: "no", label: "No" },
+  { id: "unsure", label: "Not sure" },
+];
+
+const OPINION = [
+  { id: "agree", label: "Sounds good" },
+  { id: "discuss", label: "Let's talk first" },
+  { id: "disagree", label: "I don't agree" },
+];
+
+// From js/products.js in the shop (14 Nov 2026). `ask` = the details still missing on the website.
+const PRODUCTS = [
+  { id: "mg_oil", name: "Magnesium Oil Spray", now: "3 strengths: 30% 100ml ৳360 · 50% 100ml ৳500 · 2x 130ml ৳850. Has ingredients, how-to tips and 3 benefits.",
+    ask: ["name", "variants", "benefits", "cautions", "lasts", "shelf_life"] },
+  { id: "conditioner_bar", name: "Solid Conditioner Bar", now: "All hair types, 60g+, ৳750. Has ingredients and how-to.",
+    ask: ["name", "lasts", "storage", "shelf_life"] },
+  { id: "detox_shampoo", name: "Detox Shampoo Bar", now: "Oily scalp, 60g+, ৳700. Only one sentence on the website.",
+    ask: ["ingredients", "how", "for_whom", "benefits", "lasts", "storage", "cautions"] },
+  { id: "silkroot_shampoo", name: "Silkroot Shampoo Bar", now: "Sensitive scalp, 60g+, ৳700. Only one sentence on the website.",
+    ask: ["ingredients", "how", "for_whom", "benefits", "lasts", "storage", "cautions"] },
+  { id: "scalp_elixir", name: "RoseMintClove Scalp Elixir", now: "118ml, ৳550. Only one sentence on the website.",
+    ask: ["ingredients", "how", "for_whom", "benefits", "cautions", "shelf_life"] },
+  { id: "tongue_scraper", name: "Copper Tongue Scraper (Type A)", now: "৳650. Has how-to. Says it lasts up to 10 years.",
+    ask: ["ingredients", "care", "packaging", "cautions"] },
+  { id: "dental_floss", name: "Biodegradable Dental Floss", now: "Bottled ৳250, Refill ৳180. Says corn-based. Has a short how-to.",
+    ask: ["ingredients", "size", "packaging", "lasts"] },
+  { id: "dish_soap", name: "Non-Toxic Solid Dish Soap", now: "Bar ৳180, Block 500g ৳750. Has ingredients and how-to.",
+    ask: ["name", "size", "lasts", "cautions"] },
+  { id: "toilet_pods", name: "Non-Toxic Toilet Cleaning Pods", now: "Pack of 7 (30g each), ৳370. Only one sentence on the website.",
+    ask: ["ingredients", "how", "benefits", "cautions", "lasts", "packaging"] },
+  { id: "handwash_tablets", name: "Non-Toxic Foaming Handwash Tablets", now: "Pack of 2 (500ml) ৳200 · Pack of 4 (1000ml) ৳380. One sentence, no photo yet.",
+    ask: ["ingredients", "how", "size", "cautions", "lasts", "photo"] },
+  { id: "allpurpose_tablets", name: "Non-Toxic All-Purpose Cleaning Tablets", now: "Pack of 2 (600ml), ৳300. One sentence, no photo yet.",
+    ask: ["ingredients", "how", "for_whom", "cautions", "photo"] },
+  { id: "bath_bomb", name: "Bath Bomb (single and set of 3)", now: "100g, scent of your choice, ৳220 · Set of 3 ৳600. One sentence each.",
+    ask: ["ingredients", "variants", "how", "cautions", "storage", "shelf_life"] },
+  { id: "footsoak", name: "Footsoak (pack of 3)", now: "60g each, scent of your choice, ৳270. One sentence.",
+    ask: ["ingredients", "variants", "how", "benefits", "cautions"] },
+  { id: "pain_salve", name: "Pain Relief Salve", now: "70g, ৳700. One sentence, no photo yet.",
+    ask: ["name", "ingredients", "how", "benefits", "cautions", "shelf_life", "photo"] },
+];
+
+// Every product can have every field; only the ones in `ask` are marked "Needed".
+const PRODUCT_FIELDS = [
+  { id: "name", type: "text", label: "Official product name", help: "Exactly as it should appear everywhere. Example: Magnesium Oil Spray 30%" },
+  { id: "ingredients", type: "longtext", label: "Full ingredient list (or materials)", help: "One per line is fine. Write it as it is on your label or recipe." },
+  { id: "size", type: "text", label: "Size, weight or quantity", placeholder: "Example: 60g, 100ml, 30m of floss" },
+  { id: "variants", type: "longtext", label: "Versions (sizes, strengths, scents)", help: "And who each version is for." },
+  { id: "made", type: "longtext", label: "How it is made", help: "Only what you are happy to share. Example: cold-process, hand-poured, cured for 4 weeks." },
+  { id: "how", type: "longtext", label: "How to use it", help: "Short steps, like you would explain to a customer." },
+  { id: "for_whom", type: "longtext", label: "Who is it for? When do people use it?" },
+  { id: "benefits", type: "longtext", label: "What it does (only what you are sure about)", help: "Things you have seen or customers keep saying." },
+  { id: "cautions", type: "longtext", label: "Precautions: who should not use it, what to avoid" },
+  { id: "storage", type: "text", label: "How to store it" },
+  { id: "shelf_life", type: "text", label: "Shelf life or expiry", placeholder: "Example: best within 12 months of opening" },
+  { id: "lasts", type: "text", label: "How long does one pack last with normal use?", placeholder: "Example: about 60 washes, about 2 months" },
+  { id: "care", type: "longtext", label: "How to clean and look after it" },
+  { id: "packaging", type: "text", label: "Packaging", placeholder: "Example: paper box, glass bottle, no plastic" },
+  { id: "photo", type: "yesno", label: "Can you send a real photo of this product?", help: "The website shows a placeholder picture for it now." },
+  { id: "missing", type: "longtext", label: "Anything else important that is missing on the website?" },
+];
+
+const QUESTIONNAIRE = {
+  version: 1, // raise by 1 whenever you change questions; saved with each answer
+  sections: [
+    {
+      id: "brand",
+      title: "Brand name & tagline",
+      intro: "When the name and tagline look the same everywhere, customers know it is the same trusted shop. Google and AI tools also connect your profiles more easily.",
+      questions: [
+        { id: "brand_business_name", type: "text", required: true, label: "What is the official business name?", help: "As on your trade licence or bank account, if you have one." },
+        { id: "brand_display_name", type: "single", required: true, label: "How should the brand name be written everywhere?",
+          options: [
+            { id: "upper", label: "HAYATIQ (all capitals)" },
+            { id: "title", label: "Hayatiq" },
+            { id: "other", label: "Something else", note: "Please write it" },
+          ] },
+        { id: "brand_diff_taglines", type: "yesno", options: YES_NO, label: "Do your pages use different taglines today?",
+          help: "We found: Instagram “Handcrafted Skincare” · Facebook “Handcrafted wellness essentials for conscious souls” · Website “Handcrafted with Intention” and “Natural Self-Care for Everyday You”." },
+        { id: "brand_tagline_now", type: "longtext", label: "Is there an official tagline today? Where is it used?", showIf: { q: "brand_diff_taglines", is: ["yes", "unsure"] } },
+        { id: "brand_tagline_choice", type: "single", required: true, label: "Which tagline should we use everywhere from now on?",
+          options: [
+            { id: "t_fb", label: "Handcrafted wellness essentials for conscious souls" },
+            { id: "t_intention", label: "Handcrafted with Intention" },
+            { id: "t_dhaka", label: "Handcrafted natural wellness, made in Dhaka" },
+            { id: "t_plastic", label: "Plastic-free, non-toxic essentials, handmade in Bangladesh" },
+            { id: "t_own", label: "My own tagline", note: "Please write it" },
+          ] },
+        { id: "brand_story_has", type: "yesno", options: YES_NO, label: "Is there a story behind the brand you'd like customers to know?" },
+        { id: "brand_story", type: "longtext", label: "Tell us the story in your own words", showIf: { q: "brand_story_has", is: "yes" },
+          help: "Who makes the products, since when, and why you started. A few lines is enough. Bangla is fine." },
+        { id: "brand_maker_show", type: "single", label: "Can the website say who makes the products?",
+          options: [
+            { id: "name_photo", label: "Yes, with name and photo" },
+            { id: "name", label: "Yes, name only" },
+            { id: "team", label: "Only as “our small team in Dhaka”" },
+            { id: "no", label: "No" },
+          ] },
+        { id: "brand_location", type: "text", label: "Where are the products made? (city or area only)", placeholder: "Example: Dhaka", help: "No full address needed." },
+      ],
+    },
+    {
+      id: "products",
+      title: "Product details",
+      intro: "Customers buy with confidence when they know what is inside, how to use it and how long it lasts. Open one product at a time. “Needed” fields are the ones missing on the website now. Skip anything you don't know yet.",
+      products: PRODUCTS,
+    },
+    {
+      id: "reviews",
+      title: "Reviews & customer messages",
+      intro: "Real words from real buyers are the strongest reason for a new customer to trust a product. We only use reviews you allow.",
+      questions: [
+        { id: "rev_have", type: "yesno", options: YES_NO, required: true, label: "Do we have reviews or kind messages from customers?" },
+        { id: "rev_where", type: "multi", label: "Where are they?", showIf: { q: "rev_have", is: "yes" }, optionNotes: "About how many?",
+          options: [
+            { id: "fb_reviews", label: "Facebook page reviews" },
+            { id: "fb_comments", label: "Facebook comments" },
+            { id: "messenger", label: "Messenger chats" },
+            { id: "ig_highlight", label: "Instagram “Reviews” highlight" },
+            { id: "ig_comments", label: "Instagram comments or DMs" },
+            { id: "whatsapp", label: "WhatsApp" },
+            { id: "daraz", label: "Daraz" },
+            { id: "packly", label: "Packly" },
+            { id: "other", label: "Somewhere else", note: "Where?" },
+          ] },
+        { id: "rev_permission", type: "single", label: "Can we show these reviews on the website?", showIf: { q: "rev_have", is: "yes" },
+          options: [
+            { id: "yes_all", label: "Yes, any of them" },
+            { id: "ask_each", label: "Only after asking each customer" },
+            { id: "no_names", label: "Yes, but without names or photos" },
+            { id: "no", label: "No" },
+          ] },
+        { id: "rev_publish_what", type: "multi", label: "What may we show with a review?", showIf: { q: "rev_permission", is: ["yes_all", "ask_each"] },
+          options: [
+            { id: "first_name", label: "Customer's first name" },
+            { id: "screenshot", label: "Screenshot of the message (we hide the name if you want)" },
+            { id: "customer_photo", label: "Photo the customer took of the product" },
+            { id: "profile_photo", label: "Customer's profile photo" },
+          ] },
+        { id: "rev_send", type: "single", label: "Can you send us the original reviews or screenshots?", showIf: { q: "rev_have", is: "yes" },
+          options: [
+            { id: "now", label: "Yes, soon" },
+            { id: "later", label: "Yes, over the next few weeks" },
+            { id: "some", label: "Only some" },
+            { id: "no", label: "No" },
+          ] },
+        { id: "rev_ask_new", type: "yesno", options: YES_NO, label: "Would you be happy to ask new buyers for a short review after delivery?" },
+      ],
+    },
+    {
+      id: "customers",
+      title: "Customer questions & needs",
+      intro: "You talk to customers every day, so you know better than any tool what they ask and worry about. This shapes every product page and guide.",
+      questions: [
+        { id: "cq_before", type: "longtext", required: true, label: "What do customers ask most often before they buy?",
+          help: "Write the questions the way customers ask them. Bangla is fine. Example: “Is it safe for kids?” “How long does one bar last?”" },
+        { id: "cq_problems", type: "multi", required: true, label: "What problems do customers want to solve? Which product do you suggest?", optionNotes: "Which product do you usually suggest?",
+          options: [
+            { id: "sleep", label: "Trouble sleeping" },
+            { id: "cramps", label: "Leg cramps at night" },
+            { id: "muscles", label: "Sore or tired muscles" },
+            { id: "stress", label: "Feeling stressed, wanting to relax" },
+            { id: "hair_fall", label: "Hair fall" },
+            { id: "dandruff", label: "Dandruff or itchy scalp" },
+            { id: "oily_scalp", label: "Oily scalp" },
+            { id: "dry_hair", label: "Dry or tangled hair" },
+            { id: "bad_breath", label: "Bad breath" },
+            { id: "plastic", label: "Using less plastic" },
+            { id: "chemicals", label: "Fewer harsh chemicals at home" },
+            { id: "kids_pets", label: "Safer cleaning with kids or pets" },
+            { id: "gift", label: "Looking for a gift" },
+            { id: "other", label: "Something else", note: "What is it, and what do you suggest?" },
+          ] },
+        { id: "cq_blockers", type: "multi", label: "What stops people from ordering?", optionNotes: "Anything to add?",
+          options: [
+            { id: "price", label: "Price feels high" },
+            { id: "works", label: "Not sure it will work" },
+            { id: "safety", label: "Worried it is not safe" },
+            { id: "no_reviews", label: "No reviews to look at" },
+            { id: "delivery_cost", label: "Delivery charge" },
+            { id: "delivery_time", label: "Delivery time" },
+            { id: "how_use", label: "Don't know how to use it" },
+            { id: "new_brand", label: "Don't know the brand yet" },
+            { id: "marketplace", label: "Prefer to buy on Daraz or Packly" },
+            { id: "other", label: "Something else", note: "What?" },
+          ] },
+        { id: "cq_feedback", type: "longtext", label: "What do customers usually say after using the products?" },
+        { id: "cq_misunderstand", type: "longtext", label: "What do customers often get wrong about the products?",
+          help: "Example: thinking magnesium oil is a cooking or hair oil, or that a shampoo bar is a normal soap." },
+      ],
+    },
+    {
+      id: "evidence",
+      title: "Ingredients, facts & proof",
+      intro: "Before we write longer product pages, we must be sure every fact is right. This protects customers and keeps the shop trustworthy.",
+      questions: [
+        { id: "ev_ingredients_source", type: "multi", required: true, label: "Where can we find the exact ingredient list for each product?",
+          options: [
+            { id: "label", label: "On the product label" },
+            { id: "recipe", label: "In my recipe notes" },
+            { id: "supplier", label: "On supplier bottles or invoices" },
+            { id: "memory", label: "I know it by heart" },
+            { id: "not_yet", label: "Not written down yet" },
+          ] },
+        { id: "ev_docs", type: "multi", label: "Which of these do you have?", optionNotes: "For which products?",
+          options: [
+            { id: "labels", label: "Printed labels" },
+            { id: "recipes", label: "Written recipes or batch notes" },
+            { id: "how_cards", label: "How-to-use cards or leaflets" },
+            { id: "supplier_info", label: "Details about raw materials from suppliers" },
+            { id: "lab_tests", label: "Lab test reports" },
+            { id: "certificates", label: "Certificates or registrations (e.g. trade licence, BSTI)" },
+            { id: "none", label: "None of these yet" },
+          ] },
+        { id: "ev_send_docs", type: "single", label: "Can you send us photos of these?", showIf: { q: "ev_docs", not: "none" },
+          options: [
+            { id: "now", label: "Yes, soon" },
+            { id: "later", label: "Yes, later" },
+            { id: "no", label: "No" },
+          ] },
+        { id: "ev_claims_sure", type: "longtext", required: true, label: "Which product facts are you fully sure about, and how do you know?",
+          help: "Things you have measured or seen. Example: “One bar lasts about 60 washes, I tested it.”" },
+        { id: "ev_claims_keep", type: "multi", label: "We plan to avoid these words unless we have proof. Tick any you want to keep, and tell us the proof.",
+          help: "Leave all unticked if you agree we avoid them.", optionNotes: "What is the proof?",
+          options: [
+            { id: "cures", label: "“Cures” or “treats”" },
+            { id: "anxiety", label: "“Helps anxiety” or “reduces stress”" },
+            { id: "pain", label: "“Relieves pain”" },
+            { id: "hair_fall", label: "“Stops hair fall”" },
+            { id: "chemical_free", label: "“Chemical-free”" },
+            { id: "organic", label: "“Organic”" },
+            { id: "natural100", label: "“100% natural”" },
+            { id: "safe_kids", label: "“Safe for kids”" },
+            { id: "safe_pregnancy", label: "“Safe in pregnancy”" },
+          ] },
+        { id: "ev_expert", type: "yesno", options: YES_NO, label: "Has a doctor, pharmacist or other expert looked at any of the products?" },
+        { id: "ev_expert_who", type: "longtext", label: "Who, and what did they say?", showIf: { q: "ev_expert", is: "yes" } },
+      ],
+    },
+    {
+      id: "language",
+      title: "Website text & language",
+      intro: "The language we write in decides which customers can find us. Right now a button turns the page into Bangla, but Google only sees the English version.",
+      questions: [
+        { id: "lang_more_detail", type: "yesno", options: YES_NO, required: true, label: "Are you happy for us to add longer product descriptions (ingredients, how to use, common questions)?" },
+        { id: "lang_can_provide", type: "single", label: "Can you give us these extra details?",
+          options: [
+            { id: "all", label: "Yes, for all products" },
+            { id: "some", label: "For some products" },
+            { id: "draft", label: "Please draft them and I will check" },
+            { id: "no", label: "Not right now" },
+          ] },
+        { id: "lang_audience", type: "single", required: true, label: "Who should the website mainly speak to?",
+          options: [
+            { id: "bn", label: "Bangla-speaking customers" },
+            { id: "en", label: "English-speaking customers" },
+            { id: "both", label: "Both" },
+          ] },
+        { id: "lang_bangla_pages", type: "single", label: "Should we make separate Bangla pages later?",
+          help: "Separate Bangla pages can be found by people who search in Bangla, for example “মুখে দুর্গন্ধ দূর করার উপায়”.",
+          options: [
+            { id: "yes", label: "Yes" },
+            { id: "later", label: "Maybe later" },
+            { id: "no", label: "No, English only" },
+          ] },
+        { id: "lang_bangla_url", type: "single", label: "How should the Bangla page links look?", showIf: { q: "lang_bangla_pages", is: ["yes", "later"] },
+          help: "Bangla letters look nice, but they turn into long codes when a link is copied or shared.",
+          options: [
+            { id: "en_letters", label: "English letters, e.g. hayatiq.netlify.app/bn/magnesium-oil (our suggestion)" },
+            { id: "bn_letters", label: "Bangla letters" },
+            { id: "you_decide", label: "You decide" },
+          ] },
+        { id: "lang_bangla_checker", type: "single", label: "Who will check the Bangla text?", showIf: { q: "lang_bangla_pages", is: ["yes", "later"] },
+          options: [
+            { id: "me", label: "I will" },
+            { id: "someone", label: "Someone I know", note: "Who?" },
+            { id: "you", label: "Please do it yourselves" },
+          ] },
+      ],
+    },
+    {
+      id: "sales",
+      title: "Where you sell",
+      intro: "Knowing which channels and products bring orders tells us where to put effort first.",
+      questions: [
+        { id: "sales_channels", type: "multi", required: true, label: "Where do orders come from today?", optionNotes: "About what share of orders?",
+          options: [
+            { id: "website", label: "Website" },
+            { id: "facebook", label: "Facebook / Messenger" },
+            { id: "instagram", label: "Instagram" },
+            { id: "whatsapp", label: "WhatsApp" },
+            { id: "daraz", label: "Daraz" },
+            { id: "packly", label: "Packly" },
+            { id: "offline", label: "In person or through shops" },
+            { id: "other", label: "Somewhere else", note: "Where?" },
+          ] },
+        { id: "sales_links", type: "longtext", required: true, label: "Please paste the links to your Daraz and Packly shop pages",
+          help: "Copy the link from the app's Share button. One per line." },
+        { id: "sales_top", type: "multi", label: "Which products sell the most?", options: PRODUCTS.map((p) => ({ id: p.id, label: p.name })) },
+        { id: "sales_asked", type: "multi", label: "Which products get many questions but few orders?", optionNotes: "Why, do you think?",
+          options: PRODUCTS.map((p) => ({ id: p.id, label: p.name })) },
+        { id: "sales_requested", type: "longtext", label: "Do customers ask for products that are not on the website?" },
+        { id: "sales_consistent", type: "single", label: "Are prices and product details the same on every platform?",
+          options: [
+            { id: "same", label: "Yes, the same everywhere" },
+            { id: "some", label: "A few differences" },
+            { id: "many", label: "Many differences" },
+            { id: "unsure", label: "Not sure" },
+          ] },
+        { id: "sales_diffs", type: "longtext", label: "What is different, and why?", showIf: { q: "sales_consistent", is: ["some", "many"] },
+          help: "Example: Daraz price is higher because of their fee." },
+      ],
+    },
+    {
+      id: "decisions",
+      title: "Your opinion on our ideas",
+      intro: "These are our suggestions. Nothing changes on the website until you agree. Tap “View why we need this” to read each idea first.",
+      questions: [
+        { id: "dec_naming", type: "single", options: OPINION, label: "Product names that include size or strength, e.g. “Magnesium Oil Spray 30% · 100ml”." },
+        { id: "dec_descriptions", type: "single", options: OPINION, label: "Longer product pages with ingredients, how to use and common questions." },
+        { id: "dec_categories", type: "single", options: OPINION, label: "Category pages with a short intro and a “Which one is right for me?” guide." },
+        { id: "dec_category_names", type: "longtext", label: "Would you rename or regroup any categories?",
+          help: "Today: Magnesium Oil Spray · Hair Care · Oral Care · Cleaning Supply · Bath Bombs · Footsoaks · Salves & Balms." },
+        { id: "dec_tone", type: "single", label: "How should the website talk to customers?",
+          options: [
+            { id: "warm", label: "Warm and friendly" },
+            { id: "simple", label: "Short and simple" },
+            { id: "expert", label: "Detailed, like an expert" },
+            { id: "mix", label: "A mix", note: "How?" },
+          ] },
+        { id: "dec_reviews", type: "single", options: OPINION, label: "Real customer reviews on product pages (only with permission)." },
+        { id: "dec_guides", type: "single", options: OPINION, label: "A few helpful guides, e.g. “How to use magnesium oil at bedtime”." },
+        { id: "dec_safe_words", type: "single", options: OPINION, label: "Careful wording for health benefits, e.g. “many customers use it before bed” instead of “cures sleep problems”." },
+        { id: "dec_other", type: "longtext", label: "Anything else you'd like to change, add or avoid on the website?" },
+      ],
+    },
+  ],
+};
+
+if (typeof module !== "undefined") module.exports = { QUESTIONNAIRE, PRODUCTS, PRODUCT_FIELDS };

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#2E6F57">
+  <meta name="robots" content="noindex, nofollow">
+  <title>HAYATIQ · Website Questions</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232E6F57'/%3E%3Ctext x='16' y='22' font-size='17' font-family='sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EH%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><b>HAYATIQ</b><span>Website questions &amp; plan</span></div>
+    <span id="saveState" class="save" aria-live="polite">Saved on this phone</span>
+  </header>
+
+  <nav class="tabs" aria-label="Main">
+    <a href="#q" data-tab="q"><span class="ico" aria-hidden="true">✎</span>Questions</a>
+    <a href="#plan" data-tab="plan"><span class="ico" aria-hidden="true">☰</span>Our Plan</a>
+    <a href="#road" data-tab="road"><span class="ico" aria-hidden="true">➜</span>Roadmap</a>
+  </nav>
+
+  <main>
+    <section id="tab-q" class="tab" aria-label="Questions"></section>
+    <section id="tab-plan" class="tab" aria-label="Our Plan" hidden></section>
+    <section id="tab-road" class="tab" aria-label="Roadmap" hidden></section>
+  </main>
+
+  <a id="backChip" class="back-chip" href="#" hidden></a>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <noscript><p class="card">This page needs JavaScript turned on.</p></noscript>
+  <script src="js/questions.js"></script>
+  <script src="js/plan.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
