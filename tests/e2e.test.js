@@ -107,7 +107,12 @@ const inView = (page, sel) => page.$eval(sel, (el) => { const r = el.getBounding
   await page.click('[data-missing="customers"]');
   await page.waitForTimeout(500);
   assert.ok(await inView(page, q("cq_before")), "next unanswered in this topic");
-  step("Continue and 'next unanswered' buttons find the open questions");
+  const box = `${q("cq_before")} textarea.in`;
+  const h0 = await page.$eval(box, (el) => el.offsetHeight);
+  await page.fill(box, "Is it safe for kids?\nHow long does it last?\nCan I use it daily?\nDoes it smell?\nIs it oily?\nWhere is it made?");
+  assert.ok((await page.$eval(box, (el) => el.offsetHeight)) > h0 + 40, "text box should grow with the text");
+  assert.ok(await page.$eval(box, (el) => el.scrollHeight <= el.clientHeight + 4), "no hidden text inside the box");
+  step("Continue and 'next unanswered' buttons find the open questions; text boxes grow");
 
   // Plan -> question -> back.
   await page.click('.tabs a[data-tab="plan"]');

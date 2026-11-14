@@ -41,9 +41,14 @@ None. The files are deployed as they are.
 | `js/store.js` | Saving, loading, answer status, conditions. No UI. |
 | `js/export.js` | Excel and text exports, backup file. |
 | `js/app.js` | Draws the tabs, handles typing and taps, links between tabs. |
-| `css/app.css` | Styles (colours follow the shop's theme). |
+| `css/app.css` | Styles. Colours, the Outfit font and the logo match the shop (`hayatiq_main`). |
+| `fonts/`, `images/logo-small.webp` | Copied from the shop (`hayatiq_main/fonts`, `hayatiq_main/images`). Real copies, not links: GitHub Pages can't follow links outside the repo. |
 | `vendor/xlsx.mini.min.js` | SheetJS 0.18.5, only loaded when someone exports to Excel. |
 | `tests/` | `store.test.js` (Node) and `e2e.test.js` (a real browser at phone size). |
+
+## After changing CSS or JS
+
+Raise the `?v=` number on the `<link>` and `<script>` tags in `index.html` (all of them, e.g. `?v=2` → `?v=3`). Phones keep old copies of these files for a while; a new number makes them fetch the new ones.
 
 ## How question IDs work
 

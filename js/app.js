@@ -172,12 +172,11 @@ function sectionPage(s, i) {
   const next = SECTIONS[i + 1];
   const body = s.products ? s.products.map(productBlock).join("") : sectionQuestions(s, PRODUCT_FIELDS).map((q) => questionCard(index.byId[q.id])).join("");
   return `<section class="qpage" id="qs-${esc(s.id)}" hidden aria-labelledby="qt-${esc(s.id)}">
+    <a class="back-link" href="#q">← All topics</a>
     <div class="qpage-head">
-      <a class="back-link" href="#q">← All topics</a>
-      <p class="eyebrow">Topic ${i + 1} of ${SECTIONS.length}</p>
-      <h2 id="qt-${esc(s.id)}">${esc(s.title)}</h2>
+      <div class="qh-row"><span class="qh-num" aria-hidden="true">${i + 1}</span><div><p class="eyebrow">Topic ${i + 1} of ${SECTIONS.length}</p><h2 id="qt-${esc(s.id)}">${esc(s.title)}</h2></div></div>
       <div class="sec-progress"><div class="bar"><i data-bar-sec="${esc(s.id)}"></i></div><span data-text-sec="${esc(s.id)}"></span></div>
-      <p class="why-box"><b>Why we ask:</b> ${esc(s.intro)}</p>
+      <details class="why-more"><summary>Why we ask this</summary><p>${esc(s.intro)}</p></details>
     </div>
     <div class="qlist">${body}</div>
     <div class="qpage-foot">
@@ -190,41 +189,40 @@ function sectionPage(s, i) {
 function renderQuestions() {
   $("tab-q").innerHTML = `
     <div id="qOverview">
-      <div class="hero">
-        <h2>Hello! 👋</h2>
-        <p>Your answers help us improve the HAYATIQ website. Answer what you know and skip the rest. Everything saves by itself.</p>
-      </div>
-      <div class="card progress-card">
-        <div class="pc-top">${ring(0, "0%", "big")}<div><p class="pc-title" id="ovTitle"></p><p class="pc-sub" id="ovSub"></p></div></div>
-        <button type="button" class="btn wide" id="continueBtn">Start with topic 1 →</button>
-      </div>
-      <h3 class="list-title">Topics</h3>
+      <section class="hero-card">
+        <p class="hc-eyebrow">Hello 👋</p>
+        <h2 class="hc-title">Let's make the HAYATIQ website even better</h2>
+        <p class="hc-text">Answer what you know and skip the rest. Everything saves on this phone by itself.</p>
+        <div class="hc-panel"><span id="ovRing"></span><div><p class="pc-title" id="ovTitle"></p><p class="pc-sub" id="ovSub"></p></div></div>
+        <button type="button" class="btn light wide" id="continueBtn">Start with topic 1 →</button>
+      </section>
+      <div class="list-head"><h3 class="list-title">Topics</h3><span class="list-meta">${SECTIONS.length} topics · tap one to open</span></div>
       <div class="topics">${SECTIONS.map((s, i) => `
         <a class="topic" href="#q/${esc(s.id)}" data-topic="${esc(s.id)}">
           <span class="topic-ring" data-ring-sec="${esc(s.id)}">${ring(0, i + 1)}</span>
-          <span class="topic-text"><b>${esc(s.title)}</b><span class="sub" data-progress-sec="${esc(s.id)}"></span></span>
+          <span class="topic-text"><b>${esc(s.title)}<span class="next-tag" data-next-tag="${esc(s.id)}" hidden>Up next</span></b><span class="sub" data-progress-sec="${esc(s.id)}"></span></span>
           <span class="chev" aria-hidden="true">›</span>
         </a>`).join("")}
       </div>
       <p class="card muted small" id="orphanNote" hidden></p>
-      <div class="card" id="sendCard">
-        <h3>Send your answers</h3>
-        <p class="muted small">Download a file and send it to us on WhatsApp or Messenger. If downloading doesn't work inside an app, use “Copy as text” and paste it into a message.</p>
-        <div class="btn-row">
-          <button type="button" class="btn" id="expXlsx">Excel file</button>
-          <button type="button" class="btn ghost" id="expTxt">Text file</button>
-          <button type="button" class="btn ghost" id="expCopy">Copy as text</button>
-          <button type="button" class="btn ghost" id="expShare" hidden>Share…</button>
+      <section class="card send-card" id="sendCard">
+        <div class="send-head"><span class="send-ico" aria-hidden="true">↗</span><div><h3>Send your answers</h3><p class="muted small">Save a file, then send it to us on WhatsApp or Messenger.</p></div></div>
+        <div class="mini-row">
+          <button type="button" class="mini primary" id="expXlsx"><span aria-hidden="true">⤓</span>Excel</button>
+          <button type="button" class="mini" id="expTxt"><span aria-hidden="true">⤓</span>Text</button>
+          <button type="button" class="mini" id="expCopy"><span aria-hidden="true">⧉</span>Copy</button>
+          <button type="button" class="mini" id="expShare" hidden><span aria-hidden="true">↗</span>Share</button>
         </div>
-        <details class="more"><summary>Backup and restore</summary>
+        <p class="tiny muted">Download not working inside an app? Tap Copy and paste it into a message.</p>
+        <details class="more small-more"><summary>Backup &amp; restore</summary>
           <p class="muted small">Answers are kept only in this browser on this phone. Some phones clear website data that isn't opened for a while, so download a backup now and then. A backup can also move your answers to another phone.</p>
-          <div class="btn-row">
-            <button type="button" class="btn ghost" id="backupBtn">Download backup</button>
-            <label class="btn ghost" for="restoreFile">Restore backup</label>
+          <div class="mini-row">
+            <button type="button" class="mini" id="backupBtn"><span aria-hidden="true">⤓</span>Download backup</button>
+            <label class="mini" for="restoreFile"><span aria-hidden="true">⤒</span>Restore</label>
             <input type="file" id="restoreFile" accept=".json,application/json" hidden>
           </div>
         </details>
-      </div>
+      </section>
     </div>
     ${SECTIONS.map(sectionPage).join("")}`;
   const orphans = orphanAnswers(store, index.byId);
@@ -270,7 +268,12 @@ function refreshStatus() {
 
   const all = stats(index.list);
   const topicsLeft = SECTIONS.filter((s) => stats(questionsOf(s.id)).left > 0).length;
-  document.querySelector(".progress-card .ring").outerHTML = ring(all.pct, `${all.pct}%`, all.left ? "big" : "big done");
+  $("ovRing").innerHTML = ring(all.pct, all.left ? `${all.pct}%` : "✓", all.left ? "big light" : "big light done");
+  const next = firstMissing(index.list);
+  for (const s of SECTIONS) document.querySelector(`[data-next-tag="${s.id}"]`).hidden = !(all.done && next && next.sectionId === s.id);
+  const badge = $("tabBadge");
+  badge.hidden = all.done === 0;
+  badge.textContent = all.left ? `${all.pct}%` : "✓";
   $("ovTitle").textContent = all.left ? `${all.done} of ${all.total} questions answered` : "Everything is answered. Thank you! 🎉";
   $("ovSub").innerHTML = all.left
     ? `<em>${all.left} left</em> in ${topicsLeft} topic${topicsLeft === 1 ? "" : "s"}${all.neededLeft ? ` · ${all.neededLeft} of them marked Needed` : ""}`
@@ -298,6 +301,7 @@ function onQuestionInput(e) {
   else if (el.type === "radio") patch = { v: el.value };
   else patch = { v: el.value };
   setAnswer(store, q, patch, QUESTIONNAIRE.version);
+  autoGrow(el);
   if (el.type === "checkbox" || el.type === "radio") syncOptionNotes(card);
   if (el.type === "radio") {
     const warn = card.querySelector(".older-warn");
@@ -307,6 +311,14 @@ function onQuestionInput(e) {
   scheduleSave();
   refreshStatus();
 }
+
+// Text boxes grow with what is typed, so long answers stay readable on a phone.
+function autoGrow(el) {
+  if (!el || el.tagName !== "TEXTAREA" || el.offsetParent === null) return;
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight + 3}px`;
+}
+const growAll = (root) => root && root.querySelectorAll("textarea.in").forEach(autoGrow);
 
 function syncOptionNotes(card) {
   for (const n of card.querySelectorAll(".opt-note")) {
@@ -322,6 +334,7 @@ function onQuestionClick(e) {
     t.hidden = true;
     const ta = t.closest(".q").querySelector("textarea.note");
     ta.hidden = false;
+    autoGrow(ta);
     ta.focus();
   } else if (t.classList.contains("clear-btn")) {
     const card = t.closest(".q");
@@ -382,33 +395,34 @@ const planItems = PLAN.sections.flatMap((s) => s.items);
 
 function renderPlan() {
   $("tab-plan").innerHTML = `
-    <div class="card plan-hero">
-      <p class="eyebrow">Our plan</p>
-      <h2>How we want to improve the website</h2>
-      <p class="muted">Read each topic at your own pace. Add a note wherever you have a thought or a question.</p>
-      <div class="status-note"><span class="status-ico" aria-hidden="true">⏸</span><span><b>Nothing has changed on the website yet.</b> We start only after you agree.</span></div>
+    <section class="hero-card">
+      <p class="hc-eyebrow">Our plan</p>
+      <h2 class="hc-title">How we want to improve the website</h2>
+      <p class="hc-text">Read each topic at your own pace. Add a note wherever you have a thought or a question.</p>
+      <div class="hc-note"><span class="status-ico" aria-hidden="true">⏸</span><span><b>Nothing has changed on the website yet.</b> We start only after you agree.</span></div>
       <div class="stats">
         <div><b>${PLAN.sections.length}</b><span>topics</span></div>
         <div><b>${planItems.length}</b><span>ideas</span></div>
         <div class="warm"><b>${planItems.filter((i) => i.input || (i.questions || []).length || (i.sections || []).length).length}</b><span>need your input</span></div>
       </div>
-      <details class="howto">
-        <summary>How to read this plan</summary>
-        <div class="legend-grid">
-          <div class="box plan"><span class="lbl c-plan">Our Plan</span><p>What we suggest doing</p></div>
-          <div class="box why"><span class="lbl c-why">Why It Matters</span><p>Why it is useful</p></div>
-          <div class="box input"><span class="lbl c-input">Your Input Needed</span><p>A decision or facts from you</p></div>
-          <div class="box hypo"><span class="lbl c-hypo">AI Research Hypothesis</span><p>An idea that still needs checking</p></div>
-        </div>
-        <p class="kv-k legend-sub">How we know something</p>
-        <ul class="ev-list">
-          <li><span class="ev ev-checked">We checked this</span><span>We looked at the website or pages ourselves.</span></li>
-          <li><span class="ev ev-research">Research finding</span><span>Seen in Google suggestions or search results.</span></li>
-          <li><span class="ev ev-hypothesis">AI research hypothesis</span><span>Likely, but not proven yet.</span></li>
-        </ul>
-        <p class="small muted">Each topic ends with a <b>Your Notes</b> box for your thoughts, questions or concerns.</p>
-      </details>
-    </div>
+    </section>
+    <details class="card howto">
+      <summary><span class="howto-ico" aria-hidden="true">?</span>How to read this plan</summary>
+      <div class="legend-grid">
+        <div class="box plan"><span class="lbl c-plan">Our Plan</span><p>What we suggest doing</p></div>
+        <div class="box why"><span class="lbl c-why">Why It Matters</span><p>Why it is useful</p></div>
+        <div class="box input"><span class="lbl c-input">Your Input Needed</span><p>A decision or facts from you</p></div>
+        <div class="box hypo"><span class="lbl c-hypo">AI Research Hypothesis</span><p>An idea that still needs checking</p></div>
+      </div>
+      <p class="kv-k legend-sub">How we know something</p>
+      <ul class="ev-list">
+        <li><span class="ev ev-checked">We checked this</span><span>We looked at the website or pages ourselves.</span></li>
+        <li><span class="ev ev-research">Research finding</span><span>Seen in Google suggestions or search results.</span></li>
+        <li><span class="ev ev-hypothesis">AI research hypothesis</span><span>Likely, but not proven yet.</span></li>
+      </ul>
+      <p class="small muted">Each topic ends with a <b>Your Notes</b> box for your thoughts, questions or concerns.</p>
+    </details>
+    <div class="list-head"><h3 class="list-title">Topics</h3><span class="list-meta">tap one to read</span></div>
     <div class="psecs">${PLAN.sections.map((s, i) => `
       <details class="sec" id="ps-${esc(s.id)}" name="psec">
         <summary><span class="letter">${String.fromCharCode(65 + i)}</span><span class="topic-text"><b>${esc(s.title)}</b><span class="sub">${esc(s.summary)}</span><span class="flag" data-note-flag="${esc(s.id)}"${store.planNotes[s.id] ? "" : " hidden"}>✎ You added a note</span></span><span class="chev" aria-hidden="true">›</span></summary>
@@ -420,14 +434,14 @@ function renderPlan() {
         </div>
       </details>`).join("")}
     </div>
-    <div class="card">
-      <h3>Send your notes on the plan</h3>
-      <div class="btn-row">
-        <button type="button" class="btn" id="pexpXlsx">Excel file</button>
-        <button type="button" class="btn ghost" id="pexpTxt">Text file</button>
-        <button type="button" class="btn ghost wide" id="pexpCopy">Copy as text</button>
+    <section class="card send-card">
+      <div class="send-head"><span class="send-ico" aria-hidden="true">↗</span><div><h3>Send your notes on the plan</h3><p class="muted small">Only the topics where you wrote a note matter to us.</p></div></div>
+      <div class="mini-row">
+        <button type="button" class="mini primary" id="pexpXlsx"><span aria-hidden="true">⤓</span>Excel</button>
+        <button type="button" class="mini" id="pexpTxt"><span aria-hidden="true">⤓</span>Text</button>
+        <button type="button" class="mini" id="pexpCopy"><span aria-hidden="true">⧉</span>Copy</button>
       </div>
-    </div>`;
+    </section>`;
 }
 
 // Answered / not yet, next to each linked question in the plan and roadmap.
@@ -451,6 +465,7 @@ function onPlanInput(e) {
   if (text.trim()) store.planNotes[id] = { text, at: new Date().toISOString() };
   else delete store.planNotes[id];
   document.querySelector(`[data-note-flag="${id}"]`).hidden = !text.trim();
+  autoGrow(e.target);
   scheduleSave();
 }
 
@@ -462,12 +477,16 @@ function renderRoadmap() {
     return q ? `<a class="qlink xlink" href="${qHash(q)}" data-back="#road" data-back-title="Roadmap"><span class="qstate" data-q-state="${esc(qid)}"></span><span>${esc(qName(q))}</span><span class="go">→</span></a>` : "";
   };
   $("tab-road").innerHTML = `
-    <div class="hero">
-      <h2>Roadmap</h2>
-      <p class="stage">${esc(ROADMAP.stage)}</p>
+    <section class="hero-card">
+      <p class="hc-eyebrow">Roadmap</p>
+      <h2 class="hc-title">Where we are, and what comes next</h2>
+      <div class="hc-note"><span class="status-ico" aria-hidden="true">●</span><span>${esc(ROADMAP.stage)}</span></div>
+    </section>
+    <div class="card">
+      <ol class="timeline">${ROADMAP.steps.map((s) => `<li class="${s.state}"><span class="dot">${s.state === "done" ? "✓" : ""}</span><span>${esc(s.title)}</span>${s.state === "now" ? ' <span class="here">We are here</span>' : ""}</li>`).join("")}</ol>
+      <p class="muted small">The phases are a proposal. Each one starts only after you agree.</p>
     </div>
-    <ol class="timeline">${ROADMAP.steps.map((s) => `<li class="${s.state}"><span class="dot">${s.state === "done" ? "✓" : ""}</span>${esc(s.title)}${s.state === "now" ? ' <span class="here">We are here</span>' : ""}</li>`).join("")}</ol>
-    <p class="muted small center">The phases are a proposal. Each one starts only after you agree.</p>
+    <div class="list-head"><h3 class="list-title">The phases</h3><span class="list-meta">tap one to read</span></div>
     <div class="psecs">${ROADMAP.phases.map((p, i) => `
       <details class="sec" id="ph-${p.id}" name="phase">
         <summary><span class="letter">${i + 1}</span><span class="topic-text"><b>${esc(p.title.replace(/^Phase \d+: /, ""))}</b><span class="sub">${esc(p.plain)}</span></span><span class="chev" aria-hidden="true">›</span></summary>
@@ -546,6 +565,7 @@ function route() {
     openDetails(sec);
     target = (b && $(`pi-${b}`)) || sec;
   }
+  requestAnimationFrame(() => growAll($(`tab-${tab}`)));
   if (target) highlight(target);
   else if (view !== currentView) {
     const y = page ? 0 : scrollOf[view] || 0;
@@ -588,6 +608,7 @@ addEventListener("hashchange", route);
 // Keep the address in step with the open plan topic, so a refresh comes back to it.
 document.addEventListener("toggle", (e) => {
   const d = e.target;
+  if (d.open) growAll(d);
   if (!d.open || !d.id || !d.id.startsWith("ps-")) return;
   const hash = `#plan/${d.id.slice(3)}`;
   if (!location.hash.startsWith(hash)) history.replaceState(history.state, "", hash);
