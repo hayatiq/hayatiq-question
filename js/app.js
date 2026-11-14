@@ -176,6 +176,7 @@ function sectionPage(s, i) {
     <div class="qpage-head">
       <div class="qh-row"><span class="qh-num" aria-hidden="true">${i + 1}</span><div><p class="eyebrow">Topic ${i + 1} of ${SECTIONS.length}</p><h2 id="qt-${esc(s.id)}">${esc(s.title)}</h2></div></div>
       <div class="sec-progress"><div class="bar"><i data-bar-sec="${esc(s.id)}"></i></div><span data-text-sec="${esc(s.id)}"></span></div>
+      <button type="button" class="sort-toggle" data-sort="${esc(s.id)}" aria-pressed="false"><span class="switch" aria-hidden="true"></span><span>Unanswered first</span><span class="sort-count" data-sort-count="${esc(s.id)}"></span></button>
       <details class="why-more"><summary>Why we ask this</summary><p>${esc(s.intro)}</p></details>
     </div>
     <div class="qlist">${body}</div>
@@ -264,6 +265,7 @@ function refreshStatus() {
     document.querySelector(`[data-bar-sec="${s.id}"]`).style.width = `${st.pct}%`;
     document.querySelector(`[data-text-sec="${s.id}"]`).innerHTML = st.left ? `${st.done} of ${st.total} answered · <em>${st.left} left</em>` : "All answered in this topic ✓";
     document.querySelector(`[data-missing="${s.id}"]`).hidden = st.left === 0;
+    document.querySelector(`[data-sort-count="${s.id}"]`).textContent = st.left ? `${st.left} open` : "all answered";
   });
 
   const all = stats(index.list);
@@ -347,10 +349,41 @@ function onQuestionClick(e) {
     t.hidden = true;
     scheduleSave();
     refreshStatus();
+  } else if (t.dataset.sort) {
+    toggleSort(t.dataset.sort);
   } else if (t.dataset.missing !== undefined || t.id === "continueBtn") {
     const q = firstMissing(t.id === "continueBtn" ? index.list : questionsOf(t.dataset.missing));
     if (q) goTo(qHash(q));
   }
+}
+
+/* ---------- "Unanswered first" toggle (one per topic) ---------- */
+
+// A viewing preference, not an answer, so it lives under its own key.
+const UI_KEY = `${STORE_KEY}:ui`;
+let uiPrefs = { unansweredFirst: {} };
+try { uiPrefs = { unansweredFirst: {}, ...JSON.parse(localStorage.getItem(UI_KEY) || "{}") }; } catch (e) {}
+
+// Sorts with CSS `order`, so cards keep their place in the page and nothing is re-drawn.
+// Runs when a topic opens or the toggle is tapped, not while typing, so a card never jumps away under the finger.
+function applySort(secId) {
+  const page = $(`qs-${secId}`);
+  if (!page) return;
+  const on = !!uiPrefs.unansweredFirst[secId];
+  const btn = page.querySelector(".sort-toggle");
+  btn.setAttribute("aria-pressed", on);
+  page.classList.toggle("sorted", on);
+  for (const card of page.querySelectorAll(".q")) card.style.order = on && card.dataset.status === "answered" ? 1 : "";
+  for (const prod of page.querySelectorAll("details.prod")) {
+    prod.style.order = on && stats(questionsOfProduct(prod.id.slice("prod-".length))).left === 0 ? 1 : "";
+  }
+}
+
+function toggleSort(secId) {
+  uiPrefs.unansweredFirst[secId] = !uiPrefs.unansweredFirst[secId];
+  try { localStorage.setItem(UI_KEY, JSON.stringify(uiPrefs)); } catch (e) {}
+  applySort(secId);
+  toast(uiPrefs.unansweredFirst[secId] ? "Unanswered questions are now at the top." : "Back to the normal order.");
 }
 
 /* ---------- Plan tab ---------- */
@@ -565,6 +598,7 @@ function route() {
     openDetails(sec);
     target = (b && $(`pi-${b}`)) || sec;
   }
+  if (page && view !== currentView) applySort(page);
   requestAnimationFrame(() => growAll($(`tab-${tab}`)));
   if (target) highlight(target);
   else if (view !== currentView) {

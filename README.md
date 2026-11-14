@@ -2,7 +2,7 @@
 
 A small, phone-first page for the HAYATIQ owner. It has three tabs:
 
-1. **Questions**: what we need to know (brand, product facts, reviews, customer questions, proof, language, sales channels, opinions). It opens on a topic list with the overall progress (% answered, how many left, in which topics) and a "Continue where you left off" button. Each topic is its own screen with its own progress and a "next unanswered question" button. Progress counts every main question plus each product's "Needed" fields; the optional "More details" fields don't count.
+1. **Questions**: what we need to know (brand, product facts, reviews, customer questions, proof, language, sales channels, opinions). It opens on a topic list with the overall progress (% answered, how many left, in which topics) and a "Continue where you left off" button. Each topic is its own screen with its own progress and a "next unanswered question" button. Each topic also has an **"Unanswered first"** switch: it moves answered questions (and, in Product details, finished products) to the bottom. It is remembered per topic under `hayatiq-question:v1:ui`, separate from the answers. Cards re-sort when the topic opens or the switch is tapped, not while typing. Progress counts every main question plus each product's "Needed" fields; the optional "More details" fields don't count.
 2. **Our Plan**: what we want to improve on the website and why, in plain words, with a notes box per topic.
 3. **Roadmap**: the five proposed phases and how we will measure progress.
 

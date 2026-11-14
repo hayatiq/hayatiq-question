@@ -97,6 +97,32 @@ const inView = (page, sel) => page.$eval(sel, (el) => { const r = el.getBounding
   assert.ok(await page.isChecked(`${q("rev_where")} input[value="messenger"]`));
   step("everything is still there after a reload");
 
+  // "Unanswered first" toggle, per topic.
+  const visualOrder = (scope) => page.$$eval(`${scope} .q`, (cards) => cards.filter((c) => !c.hidden && !c.closest("details.more"))
+    .sort((x, y) => x.getBoundingClientRect().top - y.getBoundingClientRect().top).map((c) => ({ id: c.dataset.qid, st: c.dataset.status })));
+  await page.goto(`${base}#q/brand`);
+  let order = await visualOrder("#qs-brand");
+  assert.strictEqual(order[0].st, "answered", "normal order starts with an answered question");
+  await page.click('[data-sort="brand"]');
+  order = await visualOrder("#qs-brand");
+  const firstAnswered = order.findIndex((c) => c.st === "answered");
+  assert.ok(firstAnswered > 0 && order.slice(firstAnswered).every((c) => c.st === "answered"), "unanswered first, answered at the bottom");
+  assert.strictEqual(await page.getAttribute('[data-sort="brand"]', "aria-pressed"), "true");
+  await page.reload();
+  assert.strictEqual(await page.getAttribute('[data-sort="brand"]', "aria-pressed"), "true", "the choice is remembered");
+  assert.strictEqual((await visualOrder("#qs-brand"))[0].st !== "answered", true);
+  assert.strictEqual(await page.getAttribute('[data-sort="customers"]', "aria-pressed"), "false", "other topics keep their own setting");
+  await page.click('[data-sort="brand"]');
+  assert.strictEqual((await visualOrder("#qs-brand"))[0].st, "answered", "off again: normal order");
+  await page.goto(`${base}#q/products`);
+  await page.click('[data-sort="products"]');
+  await page.click("#prod-mg_oil > summary");
+  const mg = await visualOrder("#prod-mg_oil");
+  assert.strictEqual(mg[mg.length - 1].id, "p.mg_oil.lasts", "inside a product, the answered field goes to the bottom");
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.click('[data-sort="products"]');
+  step("'Unanswered first' toggle sorts each topic on its own and is remembered");
+
   // "Continue" jumps to the first unanswered Needed question, and the topic list shows what is left.
   await page.goto(`${base}#q`);
   assert.ok((await page.textContent('[data-progress-sec="brand"]')).includes("left"));
