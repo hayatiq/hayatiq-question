@@ -138,8 +138,9 @@ details.more[open] > summary::before { content: "− "; }
 .q-label { font-weight: 650; color: var(--heading); font-size: 17px; line-height: 1.4; }
 .help { margin-top: 4px; font-size: 14.5px; color: var(--mute); }
 .hint { margin-top: 8px; font-size: 13px; color: var(--mute); }
-.q.flash { animation: flash 2.4s ease-out; }
-@keyframes flash { 0%, 35% { box-shadow: 0 0 0 4px #f5d76e; } 100% { box-shadow: var(--shadow); } }
+/* Arriving from a link: the border blinks 3 times in the brand green. */
+.q.flash { animation: blink-q .7s ease-in-out 3; }
+@keyframes blink-q { 0%, 100% { box-shadow: var(--shadow); } 50% { box-shadow: 0 0 0 3px var(--primary); } }
 
 input.in, textarea.in { display: block; width: 100%; font: inherit; color: var(--ink); background: #fcfbf9; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 13px; margin-top: 10px; transition: border-color .15s, box-shadow .15s; }
 textarea.in { min-height: 92px; resize: vertical; }
@@ -193,8 +194,9 @@ details.sec[open] > summary { border-bottom: 1px solid var(--line); }
 .plan-item { padding: 18px 0 8px; border-top: 1px solid var(--line); scroll-margin-top: 90px; border-radius: 8px; }
 .plan-item:first-child { border-top: 0; }
 .plan-item h3 { font-size: 18px; margin-bottom: 10px; }
-.plan-item.flash { animation: flash2 2.4s ease-out; }
-@keyframes flash2 { 0%, 35% { background: #fff6cf; box-shadow: 0 0 0 10px #fff6cf; } 100% { background: transparent; box-shadow: 0 0 0 10px transparent; } }
+.plan-item { position: relative; }
+.plan-item.flash::after { content: ""; position: absolute; inset: 6px -8px -2px; border: 3px solid var(--primary); border-radius: 14px; opacity: 0; pointer-events: none; animation: blink-p .7s ease-in-out 3; }
+@keyframes blink-p { 50% { opacity: 1; } }
 [tabindex="-1"]:focus { outline: none; }
 .kv { font-size: 15px; margin: 10px 0; }
 .kv-k { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); font-weight: 700; margin-bottom: 2px; }
