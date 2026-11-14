@@ -12,8 +12,14 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand"><b>HAYATIQ</b><span>Website questions &amp; plan</span></div>
-    <span id="saveState" class="save" aria-live="polite">Saved on this phone</span>
+    <div class="top-row">
+      <div class="brand"><span class="logo" aria-hidden="true">H</span><span><b>HAYATIQ</b><small>Website questions &amp; plan</small></span></div>
+      <span id="saveState" class="save" aria-live="polite"><span class="dot" aria-hidden="true"></span><span>Saves by itself</span></span>
+    </div>
+    <a id="strip" class="strip" href="#q" hidden aria-label="Overall progress. Tap to see all topics.">
+      <span class="strip-text"><b id="stripPct">0%</b> answered overall · <span id="stripLeft"></span></span>
+      <span class="bar thin"><i id="stripBar"></i></span>
+    </a>
   </header>
 
   <nav class="tabs" aria-label="Main">

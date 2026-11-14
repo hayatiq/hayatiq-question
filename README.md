@@ -2,7 +2,7 @@
 
 A small, phone-first page for the HAYATIQ owner. It has three tabs:
 
-1. **Questions**: what we need to know (brand, product facts, reviews, customer questions, proof, language, sales channels, opinions).
+1. **Questions**: what we need to know (brand, product facts, reviews, customer questions, proof, language, sales channels, opinions). It opens on a topic list with the overall progress (% answered, how many left, in which topics) and a "Continue where you left off" button. Each topic is its own screen with its own progress and a "next unanswered question" button. Progress counts every main question plus each product's "Needed" fields; the optional "More details" fields don't count.
 2. **Our Plan**: what we want to improve on the website and why, in plain words, with a notes box per topic.
 3. **Roadmap**: the five proposed phases and how we will measure progress.
 
@@ -98,7 +98,7 @@ In `js/plan.js`, add an item to a section's `items` (keys are listed at the top 
 - `questions` makes "Answer related question →" links. The questions get a "View why we need this →" link back automatically. Links are many-to-many.
 - `sections` links to a whole question section. Its questions link back only if no item names them directly.
 - Plan notes are saved per plan **section** id, so keep those ids permanent.
-- Links are hashes: `#q/<section>/<question id>`, `#plan/<section>/<item id>`, `#road`.
+- Links are hashes: `#q` (topic list), `#q/<section>` (one topic), `#q/<section>/<question id>`, `#plan/<section>/<item id>`, `#road`.
 
 ## Tests
 

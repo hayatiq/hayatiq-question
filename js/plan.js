@@ -388,11 +388,11 @@ const ROADMAP = {
   steps: [
     { title: "Research", state: "done" },
     { title: "Your answers", state: "now" },
-    { title: "Phase 1", state: "next" },
-    { title: "Phase 2", state: "next" },
-    { title: "Phase 3", state: "next" },
-    { title: "Phase 4", state: "next" },
-    { title: "Phase 5", state: "next" },
+    { title: "Phase 1 · Important fixes", state: "next" },
+    { title: "Phase 2 · Better product pages", state: "next" },
+    { title: "Phase 3 · Helpful content", state: "next" },
+    { title: "Phase 4 · Search & AI visibility", state: "next" },
+    { title: "Phase 5 · Trust & growth", state: "next" },
   ],
   phases: [
     { id: "ph1", title: "Phase 1: Important fixes", plain: "Make sure search tools can read every page and that essential facts are right.",

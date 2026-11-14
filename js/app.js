@@ -1,15 +1,15 @@
 /*
  * UI: renders the three tabs from QUESTIONNAIRE / PLAN / ROADMAP, saves every change,
  * and links questions and plan items both ways. Links are hashes:
- *   #q/<sectionId>/<questionId>   #plan/<planSectionId>/<itemId>   #road
+ *   #q (all topics)  #q/<sectionId>  #q/<sectionId>/<questionId>  #plan/<planSectionId>/<itemId>  #road
  */
 const index = indexQuestions(QUESTIONNAIRE, PRODUCT_FIELDS);
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-const sectionById = Object.fromEntries(QUESTIONNAIRE.sections.map((s) => [s.id, s]));
+const SECTIONS = QUESTIONNAIRE.sections;
+const sectionById = Object.fromEntries(SECTIONS.map((s) => [s.id, s]));
 const planSectionOf = {};
-const planItemById = {};
-for (const s of PLAN.sections) for (const i of s.items) { planSectionOf[i.id] = s; planItemById[i.id] = i; }
+for (const s of PLAN.sections) for (const i of s.items) planSectionOf[i.id] = s;
 
 /* ---------- storage ---------- */
 
@@ -38,7 +38,7 @@ function saveNow() {
   store.savedAt = new Date().toISOString();
   try {
     localStorage.setItem(STORE_KEY, JSON.stringify(store));
-    setSaveState("", "Saved ✓");
+    setSaveState("ok", "Saved");
   } catch (e) {
     setSaveState("err", "Not saved!");
     toast("This browser did not save. Please download your answers now.");
@@ -47,7 +47,7 @@ function saveNow() {
 function setSaveState(cls, text) {
   const el = $("saveState");
   el.className = `save ${cls}`;
-  el.textContent = text;
+  el.lastChild.textContent = text;
 }
 addEventListener("pagehide", () => saveTimer && saveNow());
 document.addEventListener("visibilitychange", () => document.hidden && saveTimer && saveNow());
@@ -60,10 +60,31 @@ function toast(msg) {
   toast.timer = setTimeout(() => t.classList.remove("show"), 3200);
 }
 
+/* ---------- progress ---------- */
+
+// What counts towards progress: every main question, and the "Needed" fields of each product.
+// Optional extra product fields ("More details") don't, or the total would be huge.
+const counts = (q) => !q.productId || q.required;
+
+function stats(list) {
+  const p = progress(list.filter(counts), store, index.byId);
+  return { ...p, left: p.total - p.done, neededLeft: p.needed - p.neededDone, pct: p.total ? Math.round((p.done / p.total) * 100) : 100 };
+}
+const questionsOf = (secId) => index.list.filter((q) => q.sectionId === secId);
+const questionsOfProduct = (pid) => index.list.filter((q) => q.productId === pid);
+
+// First unanswered question, "Needed" ones first.
+function firstMissing(list) {
+  const open = list.filter((q) => counts(q) && statusOf(q, store, index.byId) !== "answered" && statusOf(q, store, index.byId) !== "hidden");
+  return open.find((q) => q.required) || open[0] || null;
+}
+
+const ring = (pct, inner, cls = "") => `<span class="ring ${cls}" style="--p:${pct}" aria-hidden="true"><span>${inner}</span></span>`;
+
 /* ---------- links between questions and plan items (many to many) ---------- */
 
 // A question named by a plan item links back to it. A plan item that names a whole section
-// links back only from questions that no item names directly, so a card shows at most 2 links.
+// links back only from questions that no item names directly.
 const planLinksOfQuestion = {};
 const sectionLinks = {};
 for (const s of PLAN.sections) {
@@ -76,120 +97,146 @@ for (const s of PLAN.sections) {
     for (const secId of item.sections || []) (sectionLinks[secId] = sectionLinks[secId] || []).push(link);
   }
 }
-for (const q of index.list) if (!planLinksOfQuestion[q.id] && sectionLinks[q.sectionId]) planLinksOfQuestion[q.id] = sectionLinks[q.sectionId];
+for (const q of index.list) if (!planLinksOfQuestion[q.id] && sectionLinks[q.sectionId]) planLinksOfQuestion[q.id] = sectionLinks[q.sectionId].slice(0, 1);
 const qHash = (q) => `#q/${q.sectionId}/${q.id}`;
 const itemHash = (itemId) => `#plan/${planSectionOf[itemId].id}/${itemId}`;
+const qName = (q) => (q.productName ? `${q.productName}: ${q.label}` : q.label);
 
-/* ---------- Questions tab ---------- */
+/* ---------- Questions tab: question cards ---------- */
 
 function optionRow(q, o, checked, a, older) {
   const multi = q.type === "multi";
   const notePh = o.note || q.optionNotes;
   const noteVal = (a && a.optNotes && a.optNotes[o.id]) || "";
-  return `<label class="opt${older ? " older" : ""}"><input type="${multi ? "checkbox" : "radio"}" name="r-${esc(q.id)}" value="${esc(o.id)}" data-k="v"${checked ? " checked" : ""}><span>${esc(o.label)}</span></label>` +
+  return `<label class="opt${older ? " older" : ""}"><input type="${multi ? "checkbox" : "radio"}" name="r-${esc(q.id)}" value="${esc(o.id)}" data-k="v"${checked ? " checked" : ""}><span class="opt-mark" aria-hidden="true"></span><span class="opt-text">${esc(o.label)}</span></label>` +
     (notePh ? `<input type="text" class="in opt-note" data-k="opt" data-opt="${esc(o.id)}" placeholder="${esc(notePh)}" value="${esc(noteVal)}" aria-label="${esc(`${o.label}: ${notePh}`)}"${checked ? "" : " hidden"}>` : "");
 }
 
 function control(q, a) {
   const v = a ? a.v : "";
   const labelled = `aria-labelledby="ql-${esc(q.id)}"`;
-  if (q.type === "text") return `<input type="text" class="in" data-k="v" value="${esc(v)}" placeholder="${esc(q.placeholder || "")}" ${labelled}>`;
+  if (q.type === "text") return `<input type="text" class="in" data-k="v" value="${esc(v)}" placeholder="${esc(q.placeholder || "Type here")}" ${labelled}>`;
   if (q.type === "number") return `<input type="text" inputmode="decimal" class="in" data-k="v" value="${esc(v)}" placeholder="${esc(q.placeholder || "")}" ${labelled}>`;
-  if (q.type === "longtext") return `<textarea class="in" data-k="v" rows="3" placeholder="${esc(q.placeholder || "")}" ${labelled}>${esc(v)}</textarea>`;
+  if (q.type === "longtext") return `<textarea class="in" data-k="v" rows="3" placeholder="${esc(q.placeholder || "Type here")}" ${labelled}>${esc(v)}</textarea>`;
   const sel = selectedIds(a);
   const older = olderChoices(q, a);
-  let html = `<div class="opts" role="group" ${labelled}>`;
-  html += optionsOf(q).map((o) => optionRow(q, o, sel.includes(o.id), a, false)).join("");
-  if (q.type === "multi") {
-    html += older.map((id) => optionRow(q, { id, label: `${(a.labels && a.labels[id]) || id} (older choice)` }, true, a, true)).join("");
-  }
-  html += "</div>";
+  let html = "";
   if (q.type !== "multi" && older.length) {
-    html = `<p class="older-warn">Your earlier answer “${esc((a.labels && a.labels[older[0]]) || older[0])}” is no longer one of the choices. It is kept until you pick another one.</p>` + html;
+    html += `<p class="older-warn">Your earlier answer “${esc((a.labels && a.labels[older[0]]) || older[0])}” is no longer one of the choices. It is kept until you pick another one.</p>`;
   }
-  if (q.type !== "multi") html += `<button type="button" class="linkbtn quiet clear-btn"${sel.length ? "" : " hidden"}>Clear my answer</button>`;
+  html += `<div class="opts${q.type === "multi" ? " multi" : ""}" role="group" ${labelled}>`;
+  html += optionsOf(q).map((o) => optionRow(q, o, sel.includes(o.id), a, false)).join("");
+  if (q.type === "multi") html += older.map((id) => optionRow(q, { id, label: `${(a.labels && a.labels[id]) || id} (older choice)` }, true, a, true)).join("");
+  html += "</div>";
+  if (q.type === "multi") html = `<p class="hint">Tick all that apply.</p>` + html;
   return html;
 }
 
 function questionCard(q) {
   const a = store.answers[q.id];
   const note = (a && a.note) || "";
-  const links = (planLinksOfQuestion[q.id] || []).slice(0, 2);
-  const linkHtml = links.map((l) =>
-    `<a class="xlink" href="${itemHash(l.item)}" data-back="${qHash(q)}" data-back-title="${esc(q.label)}">View why we need this →${links.length > 1 ? ` <small>${esc(l.title)}</small>` : ""}</a>`).join("");
-  return `<div class="q" id="q-${esc(q.id)}" data-qid="${esc(q.id)}" tabindex="-1">
-    <div class="q-head"><span class="q-label" id="ql-${esc(q.id)}">${esc(q.label)}</span><span class="chip ${q.required ? "need" : "optional"}">${q.required ? "Needed" : "Optional"}</span></div>
+  const links = planLinksOfQuestion[q.id] || [];
+  const why = links.slice(0, 2).map((l, i) =>
+    `<a class="tool xlink" href="${itemHash(l.item)}" data-back="${qHash(q)}" data-back-title="${esc(q.label)}" title="${esc(l.title)}">${i ? "One more reason" : "Why we ask"} →</a>`).join("");
+  const choice = q.type === "single" || q.type === "yesno";
+  return `<div class="q" id="q-${esc(q.id)}" data-qid="${esc(q.id)}" data-need="${q.required ? 1 : 0}" tabindex="-1">
+    <div class="q-top"><span class="tag ${q.required ? "need" : "optional"}">${q.required ? "Needed" : "Optional"}</span><span class="tag answered">✓ Answered</span></div>
+    <p class="q-label" id="ql-${esc(q.id)}">${esc(q.label)}</p>
     ${q.help ? `<p class="help">${esc(q.help)}</p>` : ""}
     ${control(q, a)}
-    <div class="note-box">
-      <button type="button" class="linkbtn add-note"${note ? " hidden" : ""}>+ Add a note</button>
-      <textarea class="in note" data-k="note" rows="2" placeholder="Your note (optional)" aria-label="Note for: ${esc(q.label)}"${note ? "" : " hidden"}>${esc(note)}</textarea>
+    <textarea class="in note" data-k="note" rows="2" placeholder="Your note (optional)" aria-label="Note for: ${esc(q.label)}"${note ? "" : " hidden"}>${esc(note)}</textarea>
+    <div class="q-tools">
+      <button type="button" class="tool add-note"${note ? " hidden" : ""}>✎ Add a note</button>
+      ${why}
+      ${choice ? `<button type="button" class="tool quiet clear-btn"${selectedIds(a).length ? "" : " hidden"}>Clear answer</button>` : ""}
     </div>
-    ${linkHtml ? `<div class="links">${linkHtml}</div>` : ""}
   </div>`;
 }
 
-function productBlock(section, p) {
-  const qs = index.list.filter((q) => q.productId === p.id);
-  const needed = qs.filter((q) => q.required);
+/* ---------- Questions tab: pages ---------- */
+
+function productBlock(p) {
+  const qs = questionsOfProduct(p.id);
   const more = qs.filter((q) => !q.required);
   return `<details class="prod" id="prod-${esc(p.id)}" name="prod">
-    <summary><span>${esc(p.name)}</span><br><span class="pill" data-progress-prod="${esc(p.id)}"></span></summary>
+    <summary><span class="prod-ring" data-ring-prod="${esc(p.id)}"></span><span class="prod-name">${esc(p.name)}<span class="sub" data-progress-prod="${esc(p.id)}"></span></span></summary>
     <div class="prod-body">
       <p class="prod-now"><b>On the website now:</b> ${esc(p.now)}</p>
-      ${needed.map(questionCard).join("")}
-      <details class="more" id="more-${esc(p.id)}"><summary>More details (optional)</summary>${more.map(questionCard).join("")}</details>
+      ${qs.filter((q) => q.required).map(questionCard).join("")}
+      <details class="more" id="more-${esc(p.id)}"><summary>More details (optional) · ${more.length}</summary>${more.map(questionCard).join("")}</details>
     </div>
   </details>`;
 }
 
-function renderQuestions() {
-  const secs = QUESTIONNAIRE.sections;
-  $("tab-q").innerHTML = `
-    <div class="card intro">
-      <h2>Hello! 👋</h2>
-      <p>These questions help us improve the HAYATIQ website. You know the products and customers best.</p>
-      <p class="muted">Answer what you know. Skip what you don't. You can add a note to any question. Everything saves on this phone by itself.</p>
-      <div class="bar" aria-hidden="true"><i id="progBar"></i></div>
-      <p class="small muted" id="progText"></p>
-      <div class="chips"><span class="chip need">Needed</span><span class="chip optional">Optional</span><span class="small muted">Tap a topic to open it.</span></div>
+function sectionPage(s, i) {
+  const next = SECTIONS[i + 1];
+  const body = s.products ? s.products.map(productBlock).join("") : sectionQuestions(s, PRODUCT_FIELDS).map((q) => questionCard(index.byId[q.id])).join("");
+  return `<section class="qpage" id="qs-${esc(s.id)}" hidden aria-labelledby="qt-${esc(s.id)}">
+    <div class="qpage-head">
+      <a class="back-link" href="#q">← All topics</a>
+      <p class="eyebrow">Topic ${i + 1} of ${SECTIONS.length}</p>
+      <h2 id="qt-${esc(s.id)}">${esc(s.title)}</h2>
+      <div class="sec-progress"><div class="bar"><i data-bar-sec="${esc(s.id)}"></i></div><span data-text-sec="${esc(s.id)}"></span></div>
+      <p class="why-box"><b>Why we ask:</b> ${esc(s.intro)}</p>
     </div>
-    ${secs.map((s, i) => `
-      <details class="sec" id="qs-${esc(s.id)}" name="qsec">
-        <summary><span class="sum-title">${i + 1}. ${esc(s.title)}</span><span class="pill" data-progress-sec="${esc(s.id)}"></span></summary>
-        <div class="sec-body">
-          <p class="sec-intro"><b>Why we ask:</b> ${esc(s.intro)}</p>
-          ${s.products ? s.products.map((p) => productBlock(s, p)).join("") : sectionQuestions(s, PRODUCT_FIELDS).map((q) => questionCard(index.byId[q.id])).join("")}
-          ${i < secs.length - 1 ? `<button type="button" class="btn ghost next-btn" data-next="${esc(secs[i + 1].id)}">Next: ${esc(secs[i + 1].title)} →</button>` : `<p class="muted">That's the last topic. Thank you! Please send your answers below.</p>`}
-        </div>
-      </details>`).join("")}
-    <div class="card" id="sendCard">
-      <h3 style="margin:0">Send your answers</h3>
-      <p class="muted small">Download a file and send it to us on WhatsApp or Messenger. If a download doesn't work in this app, use “Copy as text” and paste it into a message.</p>
-      <div class="btn-row">
-        <button type="button" class="btn" id="expXlsx">Excel file</button>
-        <button type="button" class="btn ghost" id="expTxt">Text file</button>
-        <button type="button" class="btn ghost" id="expCopy">Copy as text</button>
-        <button type="button" class="btn ghost" id="expShare" hidden>Share…</button>
+    <div class="qlist">${body}</div>
+    <div class="qpage-foot">
+      <button type="button" class="btn ghost" data-missing="${esc(s.id)}">Go to the next unanswered question</button>
+      ${next ? `<a class="btn" href="#q/${esc(next.id)}">Next topic: ${esc(next.title)} →</a>` : `<a class="btn" href="#q">Finish: back to all topics</a>`}
+    </div>
+  </section>`;
+}
+
+function renderQuestions() {
+  $("tab-q").innerHTML = `
+    <div id="qOverview">
+      <div class="hero">
+        <h2>Hello! 👋</h2>
+        <p>Your answers help us improve the HAYATIQ website. Answer what you know and skip the rest. Everything saves by itself.</p>
       </div>
-      <details class="more"><summary>Backup and restore</summary>
-        <p class="muted small">Answers stay only in this browser on this phone. Some phones clear saved data from websites that aren't opened for a while, so download a backup now and then. A backup can also move your answers to another phone.</p>
+      <div class="card progress-card">
+        <div class="pc-top">${ring(0, "0%", "big")}<div><p class="pc-title" id="ovTitle"></p><p class="pc-sub" id="ovSub"></p></div></div>
+        <button type="button" class="btn wide" id="continueBtn">Start with topic 1 →</button>
+      </div>
+      <h3 class="list-title">Topics</h3>
+      <div class="topics">${SECTIONS.map((s, i) => `
+        <a class="topic" href="#q/${esc(s.id)}" data-topic="${esc(s.id)}">
+          <span class="topic-ring" data-ring-sec="${esc(s.id)}">${ring(0, i + 1)}</span>
+          <span class="topic-text"><b>${esc(s.title)}</b><span class="sub" data-progress-sec="${esc(s.id)}"></span></span>
+          <span class="chev" aria-hidden="true">›</span>
+        </a>`).join("")}
+      </div>
+      <p class="card muted small" id="orphanNote" hidden></p>
+      <div class="card" id="sendCard">
+        <h3>Send your answers</h3>
+        <p class="muted small">Download a file and send it to us on WhatsApp or Messenger. If downloading doesn't work inside an app, use “Copy as text” and paste it into a message.</p>
         <div class="btn-row">
-          <button type="button" class="btn ghost" id="backupBtn">Download backup</button>
-          <label class="btn ghost" for="restoreFile">Restore backup</label>
-          <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+          <button type="button" class="btn" id="expXlsx">Excel file</button>
+          <button type="button" class="btn ghost" id="expTxt">Text file</button>
+          <button type="button" class="btn ghost" id="expCopy">Copy as text</button>
+          <button type="button" class="btn ghost" id="expShare" hidden>Share…</button>
         </div>
-      </details>
-    </div>`;
+        <details class="more"><summary>Backup and restore</summary>
+          <p class="muted small">Answers are kept only in this browser on this phone. Some phones clear website data that isn't opened for a while, so download a backup now and then. A backup can also move your answers to another phone.</p>
+          <div class="btn-row">
+            <button type="button" class="btn ghost" id="backupBtn">Download backup</button>
+            <label class="btn ghost" for="restoreFile">Restore backup</label>
+            <input type="file" id="restoreFile" accept=".json,application/json" hidden>
+          </div>
+        </details>
+      </div>
+    </div>
+    ${SECTIONS.map(sectionPage).join("")}`;
   const orphans = orphanAnswers(store, index.byId);
   if (orphans.length) {
-    $("sendCard").insertAdjacentHTML("beforebegin", `<p class="card muted small">${orphans.length} earlier answer(s) belong to questions we have since removed or changed. They are kept and included in your exports.</p>`);
+    $("orphanNote").hidden = false;
+    $("orphanNote").textContent = `${orphans.length} earlier answer(s) belong to questions we have since removed or changed. They are kept and included in your exports.`;
   }
   if (navigator.share) $("expShare").hidden = false;
   refreshStatus();
 }
 
-// Show/hide conditional questions and update every progress label.
+// Show/hide conditional questions and update every progress display.
 function refreshStatus() {
   for (const q of index.list) {
     const card = document.getElementById(`q-${q.id}`);
@@ -198,33 +245,42 @@ function refreshStatus() {
     card.hidden = st === "hidden";
     card.dataset.status = st;
   }
-  const label = (list, el) => {
-    if (!el) return;
-    const p = progress(list, store, index.byId);
-    const done = p.needed ? p.neededDone === p.needed : p.done > 0;
-    el.textContent = p.needed ? `${p.neededDone} of ${p.needed} needed${done ? " ✓" : ""}` : p.done ? `${p.done} answered ✓` : "Optional";
-    el.classList.toggle("done", done);
-  };
-  for (const s of QUESTIONNAIRE.sections) {
-    const el = document.querySelector(`[data-progress-sec="${s.id}"]`);
-    if (!s.products) {
-      label(index.list.filter((q) => q.sectionId === s.id), el);
-      continue;
+  const leftText = (st) => (st.left === 0 ? "Done ✓" : st.done === 0 ? `${st.total} questions` : `${st.done} of ${st.total} answered · <em>${st.left} left</em>`);
+  SECTIONS.forEach((s, i) => {
+    const st = stats(questionsOf(s.id));
+    let sub = leftText(st);
+    if (s.products) {
+      let started = 0;
+      for (const p of s.products) {
+        const ps = stats(questionsOfProduct(p.id));
+        if (ps.done) started++;
+        document.querySelector(`[data-progress-prod="${p.id}"]`).innerHTML = ps.left === 0 ? "Done ✓" : ps.done ? `${ps.done} of ${ps.total} · <em>${ps.left} left</em>` : `${ps.total} questions`;
+        document.querySelector(`[data-ring-prod="${p.id}"]`).innerHTML = ring(ps.pct, ps.left ? "" : "✓", ps.left ? "small" : "small done");
+      }
+      sub = `${s.products.length} products · ${st.left === 0 ? "Done ✓" : st.done ? `${started} started · <em>${st.left} answers left</em>` : `${st.total} questions`}`;
     }
-    let started = 0;
-    for (const p of s.products) {
-      const list = index.list.filter((q) => q.productId === p.id);
-      label(list, document.querySelector(`[data-progress-prod="${p.id}"]`));
-      if (progress(list, store, index.byId).done) started++;
-    }
-    // A big "0 of 77" would scare; count products instead.
-    el.textContent = `${started} of ${s.products.length} products started`;
-    el.classList.toggle("done", started === s.products.length);
-  }
-  const all = progress(index.list, store, index.byId);
-  const pct = all.needed ? Math.round((all.neededDone / all.needed) * 100) : 0;
-  $("progBar").style.width = `${pct}%`;
-  $("progText").textContent = all.done ? `${pct}% of the needed answers done · ${all.done} answers so far` : "Nothing answered yet. Start with topic 1.";
+    const subEl = document.querySelector(`[data-progress-sec="${s.id}"]`);
+    subEl.innerHTML = sub;
+    subEl.closest(".topic").classList.toggle("done", st.left === 0);
+    document.querySelector(`[data-ring-sec="${s.id}"]`).innerHTML = ring(st.pct, st.left ? i + 1 : "✓", st.left ? "" : "done");
+    document.querySelector(`[data-bar-sec="${s.id}"]`).style.width = `${st.pct}%`;
+    document.querySelector(`[data-text-sec="${s.id}"]`).innerHTML = st.left ? `${st.done} of ${st.total} answered · <em>${st.left} left</em>` : "All answered in this topic ✓";
+    document.querySelector(`[data-missing="${s.id}"]`).hidden = st.left === 0;
+  });
+
+  const all = stats(index.list);
+  const topicsLeft = SECTIONS.filter((s) => stats(questionsOf(s.id)).left > 0).length;
+  document.querySelector(".progress-card .ring").outerHTML = ring(all.pct, `${all.pct}%`, all.left ? "big" : "big done");
+  $("ovTitle").textContent = all.left ? `${all.done} of ${all.total} questions answered` : "Everything is answered. Thank you! 🎉";
+  $("ovSub").innerHTML = all.left
+    ? `<em>${all.left} left</em> in ${topicsLeft} topic${topicsLeft === 1 ? "" : "s"}${all.neededLeft ? ` · ${all.neededLeft} of them marked Needed` : ""}`
+    : "Please send your answers to us below.";
+  const cont = $("continueBtn");
+  cont.hidden = all.left === 0;
+  cont.textContent = all.done ? "Continue where you left off →" : "Start with topic 1 →";
+  $("stripPct").textContent = `${all.pct}%`;
+  $("stripLeft").textContent = all.left ? `${all.left} left` : "all done ✓";
+  $("stripBar").style.width = `${all.pct}%`;
 }
 
 function onQuestionInput(e) {
@@ -260,10 +316,11 @@ function syncOptionNotes(card) {
 }
 
 function onQuestionClick(e) {
-  const t = e.target;
+  const t = e.target.closest("button");
+  if (!t) return;
   if (t.classList.contains("add-note")) {
     t.hidden = true;
-    const ta = t.nextElementSibling;
+    const ta = t.closest(".q").querySelector("textarea.note");
     ta.hidden = false;
     ta.focus();
   } else if (t.classList.contains("clear-btn")) {
@@ -277,8 +334,9 @@ function onQuestionClick(e) {
     t.hidden = true;
     scheduleSave();
     refreshStatus();
-  } else if (t.dataset.next) {
-    goTo(`#q/${t.dataset.next}`, { push: false });
+  } else if (t.dataset.missing !== undefined || t.id === "continueBtn") {
+    const q = firstMissing(t.id === "continueBtn" ? index.list : questionsOf(t.dataset.missing));
+    if (q) goTo(qHash(q));
   }
 }
 
@@ -291,69 +349,84 @@ function questionLinks(item) {
   const out = [];
   for (const secId of item.sections || []) {
     const s = sectionById[secId];
-    if (s) out.push(`<a class="xlink" href="#q/${esc(secId)}" data-back="${back}" data-back-title="${esc(item.title)}">Go to questions: ${esc(s.title)} →</a>`);
+    if (s) out.push(`<a class="qlink xlink" href="#q/${esc(secId)}" data-back="${back}" data-back-title="${esc(item.title)}"><span class="qstate" data-sec-state="${esc(secId)}"></span><span>All questions in “${esc(s.title)}”</span><span class="go">→</span></a>`);
   }
   for (const qid of item.questions || []) {
     const q = index.byId[qid];
-    if (!q) continue;
-    const name = q.productName ? `${q.productName}: ${q.label}` : q.label;
-    out.push(`<a class="xlink" href="${qHash(q)}" data-back="${back}" data-back-title="${esc(item.title)}">Answer related question → <small>${esc(name)}</small></a>`);
+    if (q) out.push(`<a class="qlink xlink" href="${qHash(q)}" data-back="${back}" data-back-title="${esc(item.title)}"><span class="qstate" data-q-state="${esc(qid)}"></span><span>${esc(qName(q))}</span><span class="go">→</span></a>`);
   }
   return out.join("");
 }
 
 function planItem(item) {
   const b = [];
-  if (item.now) b.push(`<p class="kv"><b>Today:</b> ${esc(item.now)}</p>`);
-  if (item.found) b.push(`<div class="block"><span class="chip ev-${item.evidence || "checked"}">${EVIDENCE[item.evidence || "checked"]}</span><p>${esc(item.found)}</p></div>`);
-  if (item.plan) b.push(`<div class="box plan"><span class="chip c-plan">Our Plan</span><p>${esc(item.plan)}</p></div>`);
-  if (item.kinds) b.push(`<table class="tbl"><tr><th>Kind of search</th><th>Example</th><th>What it tells us</th></tr>${item.kinds.map((k) => `<tr><td><b>${esc(k.name)}</b></td><td>“${esc(k.example)}”</td><td>${esc(k.meaning)}</td></tr>`).join("")}</table>`);
-  if (item.list) b.push(`<ul class="list">${item.list.map((l) => `<li><b>${esc(l.name)}.</b> ${esc(l.text)}</li>`).join("")}</ul>`);
-  if (item.cards) b.push(`<div class="rcards">${item.cards.map((c) => `<div class="rcard"><h4>${esc(c.problem)} <span class="chip ev-${c.evidence}">${EVIDENCE[c.evidence]}</span></h4><dl>
+  if (item.now) b.push(`<p class="kv"><span class="kv-k">Today</span>${esc(item.now)}</p>`);
+  if (item.found) b.push(`<div class="found"><span class="ev ev-${item.evidence || "checked"}">${EVIDENCE[item.evidence || "checked"]}</span><p>${esc(item.found)}</p></div>`);
+  if (item.plan) b.push(`<div class="box plan"><span class="lbl c-plan">Our Plan</span><p>${esc(item.plan)}</p></div>`);
+  if (item.kinds) b.push(`<div class="kinds">${item.kinds.map((k) => `<div class="kind"><b>${esc(k.name)}</b><span class="ex">“${esc(k.example)}”</span><span class="muted small">${esc(k.meaning)}</span></div>`).join("")}</div>`);
+  if (item.list) b.push(`<ul class="list">${item.list.map((l) => `<li><b>${esc(l.name)}</b><span>${esc(l.text)}</span></li>`).join("")}</ul>`);
+  if (item.cards) b.push(`<div class="rcards">${item.cards.map((c) => `<div class="rcard"><h4>${esc(c.problem)}</h4><dl>
       <dt>People search</dt><dd>${esc(c.search)}</dd><dt>They want</dt><dd>${esc(c.want)}</dd><dt>Product</dt><dd>${esc(c.product)}</dd><dt>We could write</dt><dd>${esc(c.content)}</dd></dl></div>`).join("")}</div>`);
-  if (item.tiers) b.push(`<div class="tiers">${item.tiers.map((t) => `<div class="tier ${esc(t.level)}"><h4>${esc(t.level)} priority</h4><p class="small">${esc(t.why)}</p><ul>${t.terms.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`).join("")}</div>`);
-  if (item.rows) b.push(`<table class="tbl"><tr><th>${esc(item.rowHead[0])}</th><th>${esc(item.rowHead[1])}</th></tr>${item.rows.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join("")}</table>`);
-  if (item.why) b.push(`<div class="box why"><span class="chip c-why">Why It Matters</span><p>${esc(item.why)}</p></div>`);
-  if (item.benefit) b.push(`<p class="kv"><b>Expected benefit:</b> ${esc(item.benefit)}</p>`);
-  if (item.example) b.push(`<div class="box example"><b>Example</b>\n${esc(item.example)}</div>`);
-  if (item.hypothesis) b.push(`<div class="box hypo"><span class="chip c-hypo">AI Research Hypothesis</span><p>${esc(item.hypothesis)}</p></div>`);
+  if (item.tiers) b.push(`<div class="tiers">${item.tiers.map((t) => `<div class="tier ${esc(t.level)}"><h4>${esc(t.level)} priority</h4><p class="small muted">${esc(t.why)}</p><div class="terms">${t.terms.map((x) => `<span>${esc(x)}</span>`).join("")}</div></div>`).join("")}</div>`);
+  if (item.rows) b.push(`<table class="tbl"><thead><tr><th>${esc(item.rowHead[0])}</th><th>${esc(item.rowHead[1])}</th></tr></thead><tbody>${item.rows.map((r) => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join("")}</tbody></table>`);
+  if (item.why) b.push(`<div class="box why"><span class="lbl c-why">Why It Matters</span><p>${esc(item.why)}</p></div>`);
+  if (item.benefit) b.push(`<p class="kv"><span class="kv-k">Expected benefit</span>${esc(item.benefit)}</p>`);
+  if (item.example) b.push(`<div class="box example"><span class="lbl c-note">Example</span><p>${esc(item.example)}</p></div>`);
+  if (item.hypothesis) b.push(`<div class="box hypo"><span class="lbl c-hypo">AI Research Hypothesis</span><p>${esc(item.hypothesis)}</p></div>`);
   const links = questionLinks(item);
-  if (item.input || links) b.push(`<div class="box input"><span class="chip c-input">Your Input Needed</span>${item.input ? `<p>${esc(item.input)}</p>` : ""}<div class="links">${links}</div></div>`);
+  if (item.input || links) b.push(`<div class="box input"><span class="lbl c-input">Your Input Needed</span>${item.input ? `<p>${esc(item.input)}</p>` : ""}${links ? `<div class="qlinks">${links}</div>` : ""}</div>`);
   return `<article class="plan-item" id="pi-${esc(item.id)}" tabindex="-1"><h3>${esc(item.title)}</h3>${b.join("")}</article>`;
 }
 
 function renderPlan() {
   $("tab-plan").innerHTML = `
-    <div class="card intro">
+    <div class="hero">
       <h2>Our plan for the website</h2>
-      <p>This is what we would like to improve, and why. <b>Nothing has changed on the website yet.</b> We will only start after you agree.</p>
-      <p class="muted small">Tap a topic to read it. Each topic has a box for your notes.</p>
-      <div class="legend">
-        <div><span class="chip c-plan">Our Plan</span> what we suggest doing</div>
-        <div><span class="chip c-why">Why It Matters</span> why it is useful</div>
-        <div><span class="chip c-input">Your Input Needed</span> a decision or facts from you</div>
-        <div><span class="chip c-hypo">AI Research Hypothesis</span> an idea from research that still needs checking</div>
-        <div><span class="chip c-note">Your Notes</span> your thoughts, questions or concerns</div>
-      </div>
+      <p>What we would like to improve, and why. <b>Nothing has changed on the website yet.</b> We start only after you agree.</p>
+      <details class="legend-box"><summary>What do the coloured labels mean?</summary>
+        <div class="legend">
+          <div><span class="lbl c-plan">Our Plan</span> what we suggest doing</div>
+          <div><span class="lbl c-why">Why It Matters</span> why it is useful</div>
+          <div><span class="lbl c-input">Your Input Needed</span> a decision or facts from you</div>
+          <div><span class="lbl c-hypo">AI Research Hypothesis</span> an idea from research that still needs checking</div>
+          <div><span class="lbl c-note">Your Notes</span> your thoughts, questions or concerns</div>
+          <div><span class="ev ev-checked">We checked this</span> <span class="ev ev-research">Research finding</span> how we know</div>
+        </div>
+      </details>
     </div>
-    ${PLAN.sections.map((s, i) => `
+    <div class="psecs">${PLAN.sections.map((s, i) => `
       <details class="sec" id="ps-${esc(s.id)}" name="psec">
-        <summary><span class="sum-title">${String.fromCharCode(65 + i)}. ${esc(s.title)}<span class="sum-note" data-note-flag="${esc(s.id)}"${store.planNotes[s.id] ? "" : " hidden"}>✎ note</span></span><span class="sum-sub">${esc(s.summary)}</span></summary>
+        <summary><span class="letter">${String.fromCharCode(65 + i)}</span><span class="topic-text"><b>${esc(s.title)}</b><span class="sub">${esc(s.summary)}</span><span class="flag" data-note-flag="${esc(s.id)}"${store.planNotes[s.id] ? "" : " hidden"}>✎ You added a note</span></span><span class="chev" aria-hidden="true">›</span></summary>
         <div class="sec-body">
           ${s.items.map(planItem).join("")}
-          <div class="notes-area"><span class="chip c-note">Your Notes</span>
+          <div class="notes-area"><span class="lbl c-note">Your Notes</span>
             <textarea class="in" data-plan-note="${esc(s.id)}" rows="3" placeholder="Questions, ideas or concerns about “${esc(s.title)}”" aria-label="Your notes on ${esc(s.title)}">${esc((store.planNotes[s.id] && store.planNotes[s.id].text) || "")}</textarea>
           </div>
         </div>
       </details>`).join("")}
+    </div>
     <div class="card">
-      <h3 style="margin:0">Send your notes on the plan</h3>
+      <h3>Send your notes on the plan</h3>
       <div class="btn-row">
         <button type="button" class="btn" id="pexpXlsx">Excel file</button>
         <button type="button" class="btn ghost" id="pexpTxt">Text file</button>
         <button type="button" class="btn ghost wide" id="pexpCopy">Copy as text</button>
       </div>
     </div>`;
+}
+
+// Answered / not yet, next to each linked question in the plan and roadmap.
+function refreshLinkStates() {
+  for (const el of document.querySelectorAll("[data-q-state]")) {
+    const q = index.byId[el.dataset.qState];
+    const done = statusOf(q, store, index.byId) === "answered";
+    el.className = `qstate${done ? " done" : ""}`;
+    el.title = done ? "Answered" : "Not answered yet";
+  }
+  for (const el of document.querySelectorAll("[data-sec-state]")) {
+    const done = stats(questionsOf(el.dataset.secState)).left === 0;
+    el.className = `qstate${done ? " done" : ""}`;
+  }
 }
 
 function onPlanInput(e) {
@@ -371,35 +444,36 @@ function onPlanInput(e) {
 function renderRoadmap() {
   const qLink = (qid) => {
     const q = index.byId[qid];
-    return q ? `<a class="xlink" href="${qHash(q)}" data-back="#road" data-back-title="Roadmap">${esc(q.productName ? `${q.productName}: ${q.label}` : q.label)} →</a>` : "";
+    return q ? `<a class="qlink xlink" href="${qHash(q)}" data-back="#road" data-back-title="Roadmap"><span class="qstate" data-q-state="${esc(qid)}"></span><span>${esc(qName(q))}</span><span class="go">→</span></a>` : "";
   };
   $("tab-road").innerHTML = `
-    <div class="card intro">
+    <div class="hero">
       <h2>Roadmap</h2>
       <p class="stage">${esc(ROADMAP.stage)}</p>
-      <div class="steps">${ROADMAP.steps.map((s) => `<span class="step ${s.state}">${s.state === "done" ? "✓ " : ""}${esc(s.title)}</span>`).join("")}</div>
-      <p class="muted small">These phases are a proposal. Each one starts only after you agree.</p>
     </div>
-    ${ROADMAP.phases.map((p) => `
+    <ol class="timeline">${ROADMAP.steps.map((s) => `<li class="${s.state}"><span class="dot">${s.state === "done" ? "✓" : ""}</span>${esc(s.title)}${s.state === "now" ? ' <span class="here">We are here</span>' : ""}</li>`).join("")}</ol>
+    <p class="muted small center">The phases are a proposal. Each one starts only after you agree.</p>
+    <div class="psecs">${ROADMAP.phases.map((p, i) => `
       <details class="sec" id="ph-${p.id}" name="phase">
-        <summary><span class="sum-title">${esc(p.title)}</span><span class="sum-sub">${esc(p.plain)}</span></summary>
+        <summary><span class="letter">${i + 1}</span><span class="topic-text"><b>${esc(p.title.replace(/^Phase \d+: /, ""))}</b><span class="sub">${esc(p.plain)}</span></span><span class="chev" aria-hidden="true">›</span></summary>
         <div class="sec-body">
-          <p class="kv"><b>What it may include:</b></p><ul class="list">${p.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-          <div class="box input"><span class="chip c-input">Your Input Needed</span><div class="links">${p.needs.map(qLink).join("")}</div></div>
-          <p class="kv"><b>How we'll know it helped:</b> ${esc(p.measure)}</p>
+          <p class="kv"><span class="kv-k">What it may include</span></p><ul class="list plain">${p.items.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+          <div class="box input"><span class="lbl c-input">Your Input Needed</span><div class="qlinks">${p.needs.map(qLink).join("")}</div></div>
+          <p class="kv"><span class="kv-k">How we'll know it helped</span>${esc(p.measure)}</p>
         </div>
       </details>`).join("")}
-    <details class="sec" id="ph-kpi" name="phase">
-      <summary><span class="sum-title">How we will measure progress</span><span class="sum-sub">Real results, mainly orders.</span></summary>
-      <div class="sec-body"><ul class="list">${ROADMAP.kpis.map((k) => `<li><b>${esc(k.name)}.</b> ${esc(k.plain)}</li>`).join("")}</ul>
-      <div class="box hypo"><span class="chip c-hypo">Please note</span><p>${esc(ROADMAP.note)}</p></div></div>
-    </details>`;
+      <details class="sec" id="ph-kpi" name="phase">
+        <summary><span class="letter">%</span><span class="topic-text"><b>How we will measure progress</b><span class="sub">Real results, mainly orders.</span></span><span class="chev" aria-hidden="true">›</span></summary>
+        <div class="sec-body"><ul class="list">${ROADMAP.kpis.map((k) => `<li><b>${esc(k.name)}</b><span>${esc(k.plain)}</span></li>`).join("")}</ul>
+        <div class="box hypo"><span class="lbl c-hypo">Please note</span><p>${esc(ROADMAP.note)}</p></div></div>
+      </details>
+    </div>`;
 }
 
 /* ---------- navigation ---------- */
 
 const scrollOf = {};
-let currentTab = "q";
+let currentView = "q";
 
 function parseHash(h) {
   const [tab, a, b] = decodeURIComponent((h || "").replace(/^#/, "")).split("/");
@@ -417,7 +491,7 @@ function openDetails(el) {
 function highlight(el) {
   if (!el) return;
   requestAnimationFrame(() => {
-    el.scrollIntoView({ block: "start", behavior: "smooth" });
+    el.scrollIntoView({ block: "start" });
     el.classList.remove("flash");
     void el.offsetWidth;
     el.classList.add("flash");
@@ -425,34 +499,32 @@ function highlight(el) {
   });
 }
 
-function showTab(tab) {
-  if (tab !== currentTab) scrollOf[currentTab] = scrollY;
-  for (const t of ["q", "plan", "road"]) $(`tab-${t}`).hidden = t !== tab;
-  for (const a of document.querySelectorAll(".tabs a")) {
-    if (a.dataset.tab === tab) a.setAttribute("aria-current", "page");
-    else a.removeAttribute("aria-current");
-  }
-  const changed = tab !== currentTab;
-  currentTab = tab;
-  return changed;
-}
-
 function route() {
   const { tab, a, b } = parseHash(location.hash);
-  const changed = showTab(tab);
+  // A "view" is a tab, or one topic page inside Questions; each keeps its own scroll position.
+  const page = tab === "q" && sectionById[a] ? a : null;
+  const view = page ? `q/${page}` : tab;
+  if (view !== currentView) scrollOf[currentView] = scrollY;
+  for (const t of ["q", "plan", "road"]) $(`tab-${t}`).hidden = t !== tab;
+  for (const link of document.querySelectorAll(".tabs a")) {
+    if (link.dataset.tab === tab) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  $("strip").hidden = tab !== "q" || !page;
+  $("qOverview").hidden = !!page;
+  for (const s of SECTIONS) $(`qs-${s.id}`).hidden = s.id !== page;
+  if (tab !== "q") refreshLinkStates();
+
   let target = null;
-  if (tab === "q" && a) {
-    const sec = $(`qs-${a}`);
-    openDetails(sec);
-    target = sec;
-    const q = b && index.byId[b];
+  if (page && b) {
+    const q = index.byId[b];
     if (q) {
       if (q.productId) {
         openDetails($(`prod-${q.productId}`));
         if (!q.required) openDetails($(`more-${q.productId}`));
       }
       target = $(`q-${q.id}`);
-      if (target && target.hidden) { toast("This question shows after an earlier answer."); target = sec; }
+      if (target && target.hidden) { toast("This question shows after an earlier answer."); target = null; }
     }
   } else if (tab === "plan" && a) {
     const sec = $(`ps-${a}`);
@@ -460,7 +532,11 @@ function route() {
     target = (b && $(`pi-${b}`)) || sec;
   }
   if (target) highlight(target);
-  else if (changed) requestAnimationFrame(() => scrollTo(0, scrollOf[tab] || 0));
+  else if (view !== currentView) {
+    const y = page ? 0 : scrollOf[view] || 0;
+    requestAnimationFrame(() => scrollTo(0, y));
+  }
+  currentView = view;
 
   const st = history.state;
   const chip = $("backChip");
@@ -480,32 +556,25 @@ function goTo(hash, { push = true, back = null, backTitle = "" } = {}) {
 document.addEventListener("click", (e) => {
   const link = e.target.closest && e.target.closest("a[href^='#']");
   if (!link || e.defaultPrevented || e.ctrlKey || e.metaKey) return;
-  if (link.id === "backChip") {
-    e.preventDefault();
-    history.back();
-    return;
-  }
   e.preventDefault();
+  if (link.id === "backChip") return history.back();
   const href = link.getAttribute("href");
   if (link.dataset.back) {
     // Remember exactly where we came from, so Back returns to that item.
     history.replaceState(history.state, "", link.dataset.back);
     goTo(href, { back: link.dataset.back, backTitle: link.dataset.backTitle });
-  } else if (link.closest(".tabs")) {
-    if (parseHash(href).tab === currentTab) return;
-    goTo(href);
+  } else if (link.closest(".tabs") && parseHash(href).tab === parseHash(location.hash).tab && parseHash(location.hash).a === undefined) {
+    scrollTo({ top: 0, behavior: "smooth" });
   } else goTo(href);
 });
 addEventListener("popstate", route);
 addEventListener("hashchange", route);
 
-// Keep the address in step with the open topic, so a refresh comes back to it.
+// Keep the address in step with the open plan topic, so a refresh comes back to it.
 document.addEventListener("toggle", (e) => {
   const d = e.target;
-  if (!d.open || !d.id) return;
-  const m = d.id.match(/^(qs|ps)-(.+)$/);
-  if (!m) return;
-  const hash = `#${m[1] === "qs" ? "q" : "plan"}/${m[2]}`;
+  if (!d.open || !d.id || !d.id.startsWith("ps-")) return;
+  const hash = `#plan/${d.id.slice(3)}`;
   if (!location.hash.startsWith(hash)) history.replaceState(history.state, "", hash);
 }, true);
 
@@ -551,6 +620,7 @@ function wireExports() {
     store = parsed.store;
     saveNow();
     renderAll();
+    currentView = null;
     route();
     toast("Backup restored.");
   };
@@ -573,5 +643,6 @@ $("tab-q").addEventListener("change", onQuestionInput);
 $("tab-q").addEventListener("click", onQuestionClick);
 $("tab-plan").addEventListener("input", onPlanInput);
 renderAll();
-setSaveState("", store.savedAt ? "Saved on this phone" : "Saves automatically");
+setSaveState("ok", store.savedAt ? "Saved" : "Saves by itself");
+currentView = null;
 route();

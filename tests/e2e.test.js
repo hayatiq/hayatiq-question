@@ -48,11 +48,14 @@ const inView = (page, sel) => page.$eval(sel, (el) => { const r = el.getBounding
   await page.goto(base);
   await shot("1-questions");
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "page scrolls sideways");
-  assert.ok(!(await page.$eval("#qs-brand", (d) => d.open)), "sections should start closed");
-  step("loads on a phone screen, sections closed, no sideways scroll");
+  assert.ok(await page.isVisible("#qOverview") && !(await page.isVisible("#qs-brand")), "should start on the topic list");
+  assert.ok((await page.textContent("#ovTitle")).startsWith("0 of "), "overall count");
+  const total = Number((await page.textContent("#ovTitle")).match(/of (\d+)/)[1]);
+  step(`loads on a phone screen on the topic list (${total} questions), no sideways scroll`);
 
   // Answer a few kinds of question.
-  await page.click("#qs-brand > summary");
+  await page.click('[data-topic="brand"]');
+  assert.ok(await page.isVisible("#strip"), "overall progress strip on a topic page");
   await page.fill(`${q("brand_business_name")} input.in`, "HAYATIQ");
   await page.click(`${q("brand_business_name")} .add-note`);
   await page.fill(`${q("brand_business_name")} textarea.note`, "Same as trade licence");
@@ -64,14 +67,17 @@ const inView = (page, sel) => page.$eval(sel, (el) => { const r = el.getBounding
   await page.check(`${q("brand_story_has")} input[value="yes"]`);
   assert.ok(await page.isVisible(q("brand_story")), "story question should appear");
   await shot("2-brand-section");
-  step("text, note, single choice, option note, conditional question");
+  assert.strictEqual(await page.textContent("#stripPct"), `${Math.round((4 / total) * 100)}%`);
+  assert.ok((await page.textContent('[data-text-sec="brand"]')).startsWith("4 of "), "topic progress");
+  step("text, note, single choice, option note, conditional question, progress updates");
 
-  await page.click('[data-next="products"]');
-  assert.ok(await page.$eval("#qs-products", (d) => d.open) && !(await page.$eval("#qs-brand", (d) => d.open)), "Next should open only the next section");
+  await page.click('#qs-brand a.btn[href="#q/products"]');
+  assert.ok((await page.isVisible("#qs-products")) && !(await page.isVisible("#qs-brand")), "Next topic should show only that topic");
   await page.click("#prod-mg_oil > summary");
   await page.fill(`${q("p.mg_oil.lasts")} input.in`, "About 2 months");
   await shot("3-product");
-  await page.click("#qs-reviews > summary");
+  await page.click("#qs-products .back-link");
+  await page.click('[data-topic="reviews"]');
   await page.check(`${q("rev_have")} input[value="yes"]`);
   await page.check(`${q("rev_where")} input[value="daraz"]`);
   await page.check(`${q("rev_where")} input[value="messenger"]`);
@@ -80,16 +86,28 @@ const inView = (page, sel) => page.$eval(sel, (el) => { const r = el.getBounding
 
   await page.waitForFunction(() => document.getElementById("saveState").textContent.includes("Saved"));
   await page.reload();
-  await page.click("#qs-brand > summary");
+  await page.goto(`${base}#q/brand`);
   assert.strictEqual(await page.inputValue(`${q("brand_business_name")} input.in`), "HAYATIQ");
   assert.strictEqual(await page.inputValue(`${q("brand_business_name")} textarea.note`), "Same as trade licence");
   assert.ok(await page.isChecked(`${q("brand_display_name")} input[value="upper"]`));
   assert.strictEqual(await page.inputValue(`${q("brand_tagline_choice")} .opt-note[data-opt="t_own"]`), "Pure. Handmade. Ours.");
   assert.ok(await page.isVisible(q("brand_story")));
-  await page.click("#qs-reviews > summary");
+  await page.goto(`${base}#q/reviews`);
   assert.strictEqual(await page.inputValue(`${q("rev_where")} .opt-note[data-opt="daraz"]`), "about 5");
   assert.ok(await page.isChecked(`${q("rev_where")} input[value="messenger"]`));
   step("everything is still there after a reload");
+
+  // "Continue" jumps to the first unanswered Needed question, and the topic list shows what is left.
+  await page.goto(`${base}#q`);
+  assert.ok((await page.textContent('[data-progress-sec="brand"]')).includes("left"));
+  await page.click("#continueBtn");
+  await page.waitForTimeout(500);
+  assert.ok(await inView(page, q("p.mg_oil.name")), "Continue should go to the first open Needed question");
+  await page.goto(`${base}#q/customers`);
+  await page.click('[data-missing="customers"]');
+  await page.waitForTimeout(500);
+  assert.ok(await inView(page, q("cq_before")), "next unanswered in this topic");
+  step("Continue and 'next unanswered' buttons find the open questions");
 
   // Plan -> question -> back.
   await page.click('.tabs a[data-tab="plan"]');
@@ -166,6 +184,7 @@ const inView = (page, sel) => page.$eval(sel, (el) => { const r = el.getBounding
   await page.waitForTimeout(500);
   assert.ok((await page.textContent(`${q("brand_display_name")} .older-warn`)).includes("HaYaTiQ (old style)"));
   assert.ok((await page.textContent("#tab-q")).includes("1 earlier answer(s)"));
+  await page.goto(`${base}#q`); // the export buttons are on the topic list
   const txt2 = fs.readFileSync(await dl("#expTxt"), "utf8");
   assert.ok(txt2.includes("[old_question] A question we removed") && txt2.includes("Answer: kept"));
   assert.ok(txt2.includes("HaYaTiQ (old style) (older choice)"));
