@@ -378,20 +378,35 @@ function planItem(item) {
   return `<article class="plan-item" id="pi-${esc(item.id)}" tabindex="-1"><h3>${esc(item.title)}</h3>${b.join("")}</article>`;
 }
 
+const planItems = PLAN.sections.flatMap((s) => s.items);
+
 function renderPlan() {
   $("tab-plan").innerHTML = `
-    <div class="hero">
-      <h2>Our plan for the website</h2>
-      <p>What we would like to improve, and why. <b>Nothing has changed on the website yet.</b> We start only after you agree.</p>
-      <details class="legend-box"><summary>What do the coloured labels mean?</summary>
-        <div class="legend">
-          <div><span class="lbl c-plan">Our Plan</span> what we suggest doing</div>
-          <div><span class="lbl c-why">Why It Matters</span> why it is useful</div>
-          <div><span class="lbl c-input">Your Input Needed</span> a decision or facts from you</div>
-          <div><span class="lbl c-hypo">AI Research Hypothesis</span> an idea from research that still needs checking</div>
-          <div><span class="lbl c-note">Your Notes</span> your thoughts, questions or concerns</div>
-          <div><span class="ev ev-checked">We checked this</span> <span class="ev ev-research">Research finding</span> how we know</div>
+    <div class="card plan-hero">
+      <p class="eyebrow">Our plan</p>
+      <h2>How we want to improve the website</h2>
+      <p class="muted">Read each topic at your own pace. Add a note wherever you have a thought or a question.</p>
+      <div class="status-note"><span class="status-ico" aria-hidden="true">⏸</span><span><b>Nothing has changed on the website yet.</b> We start only after you agree.</span></div>
+      <div class="stats">
+        <div><b>${PLAN.sections.length}</b><span>topics</span></div>
+        <div><b>${planItems.length}</b><span>ideas</span></div>
+        <div class="warm"><b>${planItems.filter((i) => i.input || (i.questions || []).length || (i.sections || []).length).length}</b><span>need your input</span></div>
+      </div>
+      <details class="howto">
+        <summary>How to read this plan</summary>
+        <div class="legend-grid">
+          <div class="box plan"><span class="lbl c-plan">Our Plan</span><p>What we suggest doing</p></div>
+          <div class="box why"><span class="lbl c-why">Why It Matters</span><p>Why it is useful</p></div>
+          <div class="box input"><span class="lbl c-input">Your Input Needed</span><p>A decision or facts from you</p></div>
+          <div class="box hypo"><span class="lbl c-hypo">AI Research Hypothesis</span><p>An idea that still needs checking</p></div>
         </div>
+        <p class="kv-k legend-sub">How we know something</p>
+        <ul class="ev-list">
+          <li><span class="ev ev-checked">We checked this</span><span>We looked at the website or pages ourselves.</span></li>
+          <li><span class="ev ev-research">Research finding</span><span>Seen in Google suggestions or search results.</span></li>
+          <li><span class="ev ev-hypothesis">AI research hypothesis</span><span>Likely, but not proven yet.</span></li>
+        </ul>
+        <p class="small muted">Each topic ends with a <b>Your Notes</b> box for your thoughts, questions or concerns.</p>
       </details>
     </div>
     <div class="psecs">${PLAN.sections.map((s, i) => `
